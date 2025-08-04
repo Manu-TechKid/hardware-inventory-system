@@ -554,4 +554,47 @@ body {
 .btn:focus, .form-control:focus, .form-select:focus {
     outline: none;
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* Footer */
+.footer {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1rem 0;
+    margin-top: auto;
+    position: relative;
+    z-index: 1000;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer p {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 400;
+}
+
+.footer strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.footer .text-muted {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Ensure footer stays at bottom */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#app {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content {
+    flex: 1;
 } 
