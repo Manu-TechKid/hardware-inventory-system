@@ -17,10 +17,11 @@ const db = require('./database/database');
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/inventory', require('./routes/inventory'));
-app.use('/api/staff', require('./routes/staff'));
 app.use('/api/sales', require('./routes/sales'));
+app.use('/api/staff', require('./routes/staff'));
 app.use('/api/budget', require('./routes/budget'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/backup', require('./routes/backup'));
 
 // Serve the main application
 app.get('/', (req, res) => {
