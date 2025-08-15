@@ -22,6 +22,48 @@ router.get('/', (req, res) => {
     });
 });
 
+// Get sales summary
+router.get('/summary', (req, res) => {
+    const query = `
+        SELECT 
+            COUNT(*) as total_sales,
+            SUM(total_price) as total_revenue,
+            SUM(quantity) as total_items_sold,
+            AVG(total_price) as average_sale_value
+        FROM sales
+    `;
+    
+    db.get(query, [], (err, summary) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(summary);
+    });
+});
+
+// Get top selling items
+router.get('/top-items', (req, res) => {
+    const query = `
+        SELECT 
+            i.name as item_name,
+            SUM(s.quantity) as total_quantity_sold,
+            SUM(s.total_price) as total_revenue,
+            COUNT(s.id) as number_of_sales
+        FROM sales s
+        JOIN inventory i ON s.item_id = i.id
+        GROUP BY s.item_id
+        ORDER BY total_quantity_sold DESC
+        LIMIT 10
+    `;
+    
+    db.all(query, [], (err, items) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(items);
+    });
+});
+
 // Get single sale
 router.get('/:id', (req, res) => {
     const query = `
@@ -221,48 +263,6 @@ router.get('/date-range/:start/:end', (req, res) => {
             return res.status(500).json({ error: 'Database error' });
         }
         res.json(sales);
-    });
-});
-
-// Get sales summary
-router.get('/summary', (req, res) => {
-    const query = `
-        SELECT 
-            COUNT(*) as total_sales,
-            SUM(total_price) as total_revenue,
-            SUM(quantity) as total_items_sold,
-            AVG(total_price) as average_sale_value
-        FROM sales
-    `;
-    
-    db.get(query, [], (err, summary) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(summary);
-    });
-});
-
-// Get top selling items
-router.get('/top-items', (req, res) => {
-    const query = `
-        SELECT 
-            i.name as item_name,
-            SUM(s.quantity) as total_quantity_sold,
-            SUM(s.total_price) as total_revenue,
-            COUNT(s.id) as number_of_sales
-        FROM sales s
-        JOIN inventory i ON s.item_id = i.id
-        GROUP BY s.item_id
-        ORDER BY total_quantity_sold DESC
-        LIMIT 10
-    `;
-    
-    db.all(query, [], (err, items) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(items);
     });
 });
 

@@ -110,6 +110,30 @@ router.get('/staff-performance', (req, res) => {
     });
 });
 
+// Get top selling items
+router.get('/top-selling-items', (req, res) => {
+    const query = `
+        SELECT 
+            i.name as item_name,
+            i.sku,
+            SUM(s.quantity) as total_sold,
+            SUM(s.total_price) as total_revenue,
+            COUNT(s.id) as sale_count
+        FROM inventory i
+        LEFT JOIN sales s ON i.id = s.item_id
+        GROUP BY i.id, i.name, i.sku
+        ORDER BY total_sold DESC
+        LIMIT 10
+    `;
+    
+    db.all(query, [], (err, items) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(items);
+    });
+});
+
 // Get financial summary
 router.get('/financial-summary', (req, res) => {
     const query = `
@@ -388,4 +412,79 @@ router.get('/sales-by-category', (req, res) => {
     });
 });
 
-module.exports = router; 
+// Get monthly sales trend for chart
+router.get('/monthly-trend/:year', (req, res) => {
+    const year = req.params.year || new Date().getFullYear();
+    const query = `
+        SELECT 
+            strftime('%m', sale_date) as month_num,
+            CASE strftime('%m', sale_date)
+                WHEN '01' THEN 'Jan'
+                WHEN '02' THEN 'Feb'
+                WHEN '03' THEN 'Mar'
+                WHEN '04' THEN 'Apr'
+                WHEN '05' THEN 'May'
+                WHEN '06' THEN 'Jun'
+                WHEN '07' THEN 'Jul'
+                WHEN '08' THEN 'Aug'
+                WHEN '09' THEN 'Sep'
+                WHEN '10' THEN 'Oct'
+                WHEN '11' THEN 'Nov'
+                WHEN '12' THEN 'Dec'
+            END as month,
+            SUM(total_price) as revenue,
+            COUNT(*) as sales_count
+        FROM sales
+        WHERE strftime('%Y', sale_date) = ?
+        GROUP BY strftime('%m', sale_date)
+        ORDER BY strftime('%m', sale_date)
+    `;
+    
+    db.all(query, [year.toString()], (err, monthlyData) => {
+        if (err) {
+            console.error('Monthly trend query error:', err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        
+        // Fill in missing months with zero values
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const result = months.map((month, index) => {
+            const monthData = monthlyData.find(item => item.month === month);
+            return {
+                month: month,
+                revenue: monthData ? monthData.revenue : 0,
+                sales_count: monthData ? monthData.sales_count : 0
+            };
+        });
+        
+        res.json(result);
+    });
+});
+
+// Get low stock items for dashboard alerts
+router.get('/low-stock-alerts', (req, res) => {
+    const query = `
+        SELECT 
+            i.id,
+            i.name,
+            i.sku,
+            i.quantity,
+            i.min_quantity,
+            c.name as category_name
+        FROM inventory i
+        LEFT JOIN categories c ON i.category_id = c.id
+        WHERE i.quantity <= i.min_quantity AND i.min_quantity > 0
+        ORDER BY (i.quantity - i.min_quantity) ASC
+        LIMIT 10
+    `;
+    
+    db.all(query, [], (err, lowStockItems) => {
+        if (err) {
+            console.error('Low stock alerts query error:', err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(lowStockItems);
+    });
+});
+
+module.exports = router;

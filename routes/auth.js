@@ -114,4 +114,65 @@ router.get('/me', (req, res) => {
     }
 });
 
+// Change password route
+router.post('/change-password', [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const { currentPassword, newPassword } = req.body;
+
+        // Get user from database
+        db.get('SELECT * FROM users WHERE id = ?', [decoded.userId], async (err, user) => {
+            if (err) {
+                return res.status(500).json({ error: 'Database error' });
+            }
+
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            // Verify current password
+            const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+            if (!isValidPassword) {
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'Current password is incorrect' 
+                });
+            }
+
+            // Hash new password
+            const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+            // Update password in database
+            db.run('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, user.id], function(err) {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to update password' });
+                }
+
+                res.json({ 
+                    success: true,
+                    message: 'Password changed successfully' 
+                });
+            });
+        });
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 module.exports = router; 

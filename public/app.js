@@ -20,11 +20,13 @@ class HardwareInventorySystem {
     }
 
     setupEventListeners() {
-        // Navigation
+        // Navigation (robust click handling within nav links)
         document.querySelectorAll('[data-section]').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.showSection(e.target.getAttribute('data-section'));
+                const target = e.target.closest('[data-section]');
+                if (!target) return;
+                this.showSection(target.getAttribute('data-section'));
             });
         });
 
@@ -61,10 +63,46 @@ class HardwareInventorySystem {
             this.addBudget();
         });
 
+        // Setup forms
+        document.getElementById('categoryForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.addCategory();
+        });
+
+        document.getElementById('setupItemForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.addSetupItem();
+        });
+
+        document.getElementById('changePasswordForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.changePassword();
+        });
+
+        document.getElementById('changePasswordModalForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.changePasswordModal();
+        });
+
         // Edit forms
         document.getElementById('editItemForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.updateItem();
+        });
+
+        document.getElementById('editStaffForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.updateStaff();
+        });
+
+        document.getElementById('editBudgetForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.updateBudget();
+        });
+
+        document.getElementById('editCategoryForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.updateCategory();
         });
 
         document.getElementById('updateStockForm').addEventListener('submit', (e) => {
@@ -200,6 +238,9 @@ class HardwareInventorySystem {
             case 'reports':
                 this.loadReports();
                 break;
+            case 'setup':
+                this.loadSetup();
+                break;
         }
     }
 
@@ -231,6 +272,11 @@ class HardwareInventorySystem {
 
         } catch (error) {
             console.error('Error loading dashboard:', error);
+            // Set default values if API calls fail
+            document.getElementById('totalItems').textContent = '0';
+            document.getElementById('totalSales').textContent = 'KSH 0.00';
+            document.getElementById('lowStockItems').textContent = '0';
+            document.getElementById('activeStaff').textContent = '0';
         }
     }
 
@@ -249,6 +295,7 @@ class HardwareInventorySystem {
             this.sales = await this.fetchData('/api/sales');
             this.displaySales(this.sales);
             this.loadStaffForSelect();
+            this.loadInventoryForSelect();
         } catch (error) {
             console.error('Error loading sales:', error);
         }
@@ -277,20 +324,25 @@ class HardwareInventorySystem {
 
     async loadReports() {
         try {
-            const [inventorySummary, salesSummary, topItems] = await Promise.all([
+            const [inventorySummary, salesSummary, topSellingItems] = await Promise.all([
                 this.fetchData('/api/reports/inventory-summary'),
-                this.fetchData('/api/reports/sales-summary'),
-                this.fetchData('/api/sales/top-items')
+                this.fetchData('/api/sales/summary'),
+                this.fetchData('/api/reports/top-selling-items')
             ]);
 
             this.displayInventorySummary(inventorySummary);
             this.displaySalesSummary(salesSummary);
-            this.displayTopSellingItems(topItems);
+            this.displayTopSellingItems(topSellingItems);
 
-            // Load report charts
+            // Load charts
             this.loadReportCharts();
+
         } catch (error) {
             console.error('Error loading reports:', error);
+            // Set default values if API calls fail
+            this.displayInventorySummary({ total_items: 0, total_value: 0, low_stock_items: 0 });
+            this.displaySalesSummary({ total_sales: 0, total_revenue: 0, average_sale: 0 });
+            this.displayTopSellingItems([]);
         }
     }
 
@@ -313,6 +365,9 @@ class HardwareInventorySystem {
                 categories.forEach(category => {
                     categoryFilter.innerHTML += `<option value="${category.id}">${category.name}</option>`;
                 });
+                // Reset to all categories by default and ensure table shows all
+                categoryFilter.value = '';
+                this.displayInventory(this.inventory);
             }
 
             if (editCategorySelect) {
@@ -339,12 +394,12 @@ class HardwareInventorySystem {
                 });
             }
 
-            // Load items for sale
+            // Load items for sale - only items with stock > 0
             const inventory = await this.fetchData('/api/inventory');
             if (itemSelect) {
                 itemSelect.innerHTML = '<option value="">Select Item</option>';
                 inventory.forEach(item => {
-                    if (item.quantity > 0) {
+                    if ((item.quantity || 0) > 0) {
                         itemSelect.innerHTML += `<option value="${item.id}" data-price="${item.unit_price}">${item.name} (${item.quantity} in stock)</option>`;
                     }
                 });
@@ -685,6 +740,7 @@ class HardwareInventorySystem {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('addSaleModal'));
                 modal.hide();
                 this.loadSales();
+                this.loadInventory(); // Refresh inventory to show updated stock
                 this.loadDashboard();
             }
         } catch (error) {
@@ -952,13 +1008,109 @@ class HardwareInventorySystem {
         }
     }
 
-    // Edit Functions (Placeholder for now)
+    // Edit Functions
     async editStaff(id) {
-        this.showAlert('Edit staff functionality will be implemented soon!', 'info');
+        try {
+            const staff = await this.fetchData(`/api/staff/${id}`);
+            
+            // Populate edit form
+            document.getElementById('editStaffId').value = staff.id;
+            document.getElementById('editStaffName').value = staff.name;
+            document.getElementById('editStaffEmail').value = staff.email || '';
+            document.getElementById('editStaffPhone').value = staff.phone || '';
+            document.getElementById('editStaffPosition').value = staff.position || '';
+            document.getElementById('editStaffDepartment').value = staff.department || '';
+            document.getElementById('editStaffHireDate').value = staff.hire_date || '';
+            document.getElementById('editStaffSalary').value = staff.salary || '';
+            document.getElementById('editStaffStatus').value = staff.status || 'active';
+            
+            // Show edit modal
+            const modal = new bootstrap.Modal(document.getElementById('editStaffModal'));
+            modal.show();
+        } catch (error) {
+            console.error('Error loading staff for edit:', error);
+            this.showAlert('Failed to load staff details', 'error');
+        }
+    }
+
+    async updateStaff() {
+        try {
+            const formData = {
+                name: document.getElementById('editStaffName').value,
+                email: document.getElementById('editStaffEmail').value,
+                phone: document.getElementById('editStaffPhone').value,
+                position: document.getElementById('editStaffPosition').value,
+                department: document.getElementById('editStaffDepartment').value,
+                hire_date: document.getElementById('editStaffHireDate').value,
+                salary: parseFloat(document.getElementById('editStaffSalary').value) || null,
+                status: document.getElementById('editStaffStatus').value
+            };
+
+            const staffId = document.getElementById('editStaffId').value;
+            const response = await this.fetchData(`/api/staff/${staffId}`, {
+                method: 'PUT',
+                body: JSON.stringify(formData)
+            });
+
+            if (response.message) {
+                this.showAlert('Staff updated successfully!', 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editStaffModal'));
+                if (modal) modal.hide();
+                this.loadStaff();
+                this.loadDashboard();
+            } else {
+                this.showAlert(response.error || 'Failed to update staff', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating staff:', error);
+            this.showAlert('Failed to update staff', 'error');
+        }
     }
 
     async editBudget(id) {
-        this.showAlert('Edit budget functionality will be implemented soon!', 'info');
+        try {
+            const budget = await this.fetchData(`/api/budget/${id}`);
+            
+            // Populate edit form
+            document.getElementById('editBudgetId').value = budget.id;
+            document.getElementById('editBudgetCategory').value = budget.category;
+            document.getElementById('editBudgetAmount').value = budget.amount;
+            document.getElementById('editBudgetMonth').value = budget.month_year;
+            
+            // Show edit modal
+            const modal = new bootstrap.Modal(document.getElementById('editBudgetModal'));
+            modal.show();
+        } catch (error) {
+            console.error('Error loading budget for edit:', error);
+            this.showAlert('Failed to load budget details', 'error');
+        }
+    }
+
+    async updateBudget() {
+        try {
+            const formData = {
+                category: document.getElementById('editBudgetCategory').value,
+                amount: parseFloat(document.getElementById('editBudgetAmount').value),
+                month_year: document.getElementById('editBudgetMonth').value
+            };
+
+            const budgetId = document.getElementById('editBudgetId').value;
+            const response = await this.fetchData(`/api/budget/${budgetId}`, {
+                method: 'PUT',
+                body: JSON.stringify(formData)
+            });
+
+            if (response.success) {
+                this.showAlert('Budget updated successfully!', 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editBudgetModal'));
+                modal.hide();
+                this.loadBudget();
+                this.loadDashboard();
+            }
+        } catch (error) {
+            console.error('Error updating budget:', error);
+            this.showAlert('Failed to update budget', 'error');
+        }
     }
 
     // Utility functions
@@ -1031,6 +1183,9 @@ class HardwareInventorySystem {
         try {
             const lowStock = await this.fetchData('/api/inventory/low-stock');
             this.displayInventory(lowStock);
+            if (!lowStock || lowStock.length === 0) {
+                this.showAlert('No low stock items at the moment.', 'info');
+            }
         } catch (error) {
             console.error('Error loading low stock items:', error);
         }
@@ -1052,8 +1207,9 @@ class HardwareInventorySystem {
     // Chart Functions
     async loadDashboardCharts() {
         try {
+            const currentYear = new Date().getFullYear();
             const [monthlyData, categoryData] = await Promise.all([
-                this.fetchData('/api/reports/monthly-trend/2024'),
+                this.fetchData(`/api/reports/monthly-trend/${currentYear}`),
                 this.fetchData('/api/reports/sales-by-category')
             ]);
 
@@ -1278,6 +1434,394 @@ class HardwareInventorySystem {
                 }
             }
         });
+    }
+
+    async loadSetup() {
+        try {
+            await Promise.all([
+                this.loadCategoriesList(),
+                this.loadSetupItemsList(),
+                this.loadSetupCategories(),
+                this.refreshSetupStats()
+            ]);
+        } catch (error) {
+            console.error('Error loading setup:', error);
+        }
+    }
+
+    async loadCategoriesList() {
+        try {
+            const categories = await this.fetchData('/api/inventory/categories');
+            const container = document.getElementById('categoriesList');
+            
+            if (!container) return;
+            
+            if (categories.length === 0) {
+                container.innerHTML = '<p class="text-muted">No categories found.</p>';
+                return;
+            }
+
+            let html = '<div class="list-group">';
+            categories.forEach(category => {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${category.name}</strong>
+                            ${category.description ? `<br><small class="text-muted">${category.description}</small>` : ''}
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-warning me-1" onclick="app.editCategory(${category.id})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="app.deleteCategory(${category.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error loading categories list:', error);
+        }
+    }
+
+    async loadSetupItemsList() {
+        try {
+            const items = await this.fetchData('/api/inventory');
+            const container = document.getElementById('setupItemsList');
+            if (!container) return;
+
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-muted">No items found.</p>';
+                return;
+            }
+
+            let html = '<div class="list-group">';
+            items.forEach(item => {
+                html += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${item.name}</strong> (SKU: ${item.sku || 'N/A'})
+                            <br><small class="text-muted">Category: ${item.category_name || 'N/A'}</small>
+                            <br><small class="text-muted">Stock: ${item.quantity}</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-warning" onclick="app.editItem(${item.id})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="app.deleteItem(${item.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error loading setup items list:', error);
+        }
+    }
+
+    async loadSetupCategories() {
+        try {
+            const categories = await this.fetchData('/api/inventory/categories');
+            const select = document.getElementById('setupItemCategory');
+            if (select) {
+                select.innerHTML = '<option value="">Select Category</option>';
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    select.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading setup categories:', error);
+        }
+    }
+
+    async refreshSetupStats() {
+        try {
+            const [inventory, categories, staff, sales] = await Promise.all([
+                this.fetchData('/api/inventory'),
+                this.fetchData('/api/inventory/categories'),
+                this.fetchData('/api/staff'),
+                this.fetchData('/api/sales')
+            ]);
+
+            document.getElementById('setupTotalItems').textContent = inventory.length || 0;
+            document.getElementById('setupTotalCategories').textContent = categories.length || 0;
+            document.getElementById('setupTotalStaff').textContent = staff.length || 0;
+            document.getElementById('setupTotalSales').textContent = sales.length || 0;
+        } catch (error) {
+            console.error('Error refreshing setup stats:', error);
+        }
+    }
+
+    async addCategory() {
+        try {
+            const name = document.getElementById('categoryName').value.trim();
+            const description = document.getElementById('categoryDescription').value.trim();
+            
+            if (!name) {
+                this.showAlert('Category name is required', 'error');
+                return;
+            }
+
+            const response = await this.fetchData('/api/inventory/categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({ name, description })
+            });
+
+            if (response.success) {
+                this.showAlert('Category added successfully', 'success');
+                document.getElementById('categoryForm').reset();
+                await this.loadCategoriesList();
+                await this.loadCategories(); // Refresh dropdowns
+                await this.refreshSetupStats(); // Refresh stats
+                // Also refresh inventory if we're on that page
+                if (this.currentSection === 'inventory') {
+                    await this.loadInventory();
+                }
+            } else {
+                this.showAlert(response.message || response.error || 'Failed to add category', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding category:', error);
+            this.showAlert('Error adding category', 'error');
+        }
+    }
+
+    async editCategory(id) {
+        try {
+            const category = await this.fetchData(`/api/inventory/categories/${id}`);
+            document.getElementById('editCategoryId').value = category.id;
+            document.getElementById('editCategoryName').value = category.name;
+            document.getElementById('editCategoryDescription').value = category.description || '';
+
+            const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+            modal.show();
+        } catch (error) {
+            console.error('Error loading category for edit:', error);
+            this.showAlert('Failed to load category details', 'error');
+        }
+    }
+
+    async updateCategory() {
+        const id = document.getElementById('editCategoryId').value;
+        const name = document.getElementById('editCategoryName').value.trim();
+        const description = document.getElementById('editCategoryDescription').value.trim();
+
+        if (!name) {
+            this.showAlert('Category name is required', 'error');
+            return;
+        }
+
+        try {
+            const response = await this.fetchData(`/api/inventory/categories/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({ name, description })
+            });
+
+            if (response.success) {
+                this.showAlert('Category updated successfully', 'success');
+                document.getElementById('editCategoryForm').reset();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                if (modal) modal.hide();
+                await this.loadCategoriesList();
+                await this.loadCategories(); // Refresh dropdowns
+                await this.refreshSetupStats(); // Refresh stats
+            } else {
+                this.showAlert(response.message || 'Failed to update category', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating category:', error);
+            this.showAlert('Error updating category', 'error');
+        }
+    }
+
+    async deleteCategory(id) {
+        if (!confirm('Are you sure you want to delete this category?')) {
+            return;
+        }
+
+        try {
+            const response = await this.fetchData(`/api/inventory/categories/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+
+            if (response.success) {
+                this.showAlert('Category deleted successfully', 'success');
+                await this.loadCategoriesList();
+                await this.loadCategories(); // Refresh dropdowns
+                await this.refreshSetupStats(); // Refresh stats
+                // Also refresh inventory if we're on that page
+                if (this.currentSection === 'inventory') {
+                    await this.loadInventory();
+                }
+            } else {
+                this.showAlert(response.message || response.error || 'Failed to delete category', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            this.showAlert('Error deleting category', 'error');
+        }
+    }
+
+    async addSetupItem() {
+        try {
+            const formData = {
+                name: document.getElementById('setupItemName').value.trim(),
+                category_id: document.getElementById('setupItemCategory').value,
+                sku: document.getElementById('setupItemSKU').value.trim(),
+                quantity: parseInt(document.getElementById('setupItemQuantity').value),
+                min_quantity: parseInt(document.getElementById('setupItemMinQuantity').value) || 0,
+                unit_price: parseFloat(document.getElementById('setupItemPrice').value),
+                supplier: document.getElementById('setupItemSupplier').value.trim(),
+                location: document.getElementById('setupItemLocation').value.trim()
+            };
+
+            if (!formData.name || !formData.category_id || !formData.unit_price || formData.quantity < 0) {
+                this.showAlert('Please fill all required fields correctly', 'error');
+                return;
+            }
+
+            const response = await this.fetchData('/api/inventory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify(formData)
+            });
+
+            if (response.id) {
+                this.showAlert('Item added successfully', 'success');
+                document.getElementById('setupItemForm').reset();
+                await this.loadSetupItemsList();
+                await this.refreshSetupStats();
+                // Also refresh inventory if we're on that page
+                if (this.currentSection === 'inventory') {
+                    await this.loadInventory();
+                }
+                // Refresh sales dropdown if we're on sales page
+                if (this.currentSection === 'sales') {
+                    await this.loadStaffForSelect();
+                }
+            } else {
+                this.showAlert('Failed to add item', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding setup item:', error);
+            this.showAlert('Error adding item', 'error');
+        }
+    }
+
+    async changePassword() {
+        try {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                this.showAlert('All fields are required', 'error');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                this.showAlert('New passwords do not match', 'error');
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                this.showAlert('New password must be at least 6 characters', 'error');
+                return;
+            }
+
+            const response = await this.fetchData('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({
+                    currentPassword,
+                    newPassword
+                })
+            });
+
+            if (response.success) {
+                this.showAlert('Password changed successfully', 'success');
+                document.getElementById('changePasswordForm').reset();
+            } else {
+                this.showAlert(response.message || 'Failed to change password', 'error');
+            }
+        } catch (error) {
+            console.error('Error changing password:', error);
+            this.showAlert('Error changing password', 'error');
+        }
+    }
+
+    async changePasswordModal() {
+        try {
+            const currentPassword = document.getElementById('modalCurrentPassword').value;
+            const newPassword = document.getElementById('modalNewPassword').value;
+            const confirmPassword = document.getElementById('modalConfirmPassword').value;
+            
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                this.showAlert('All fields are required', 'error');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                this.showAlert('New passwords do not match', 'error');
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                this.showAlert('New password must be at least 6 characters', 'error');
+                return;
+            }
+
+            const response = await this.fetchData('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({
+                    currentPassword,
+                    newPassword
+                })
+            });
+
+            if (response.success) {
+                this.showAlert('Password changed successfully', 'success');
+                document.getElementById('changePasswordModalForm').reset();
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'));
+                if (modal) modal.hide();
+            } else {
+                this.showAlert(response.message || 'Failed to change password', 'error');
+            }
+        } catch (error) {
+            console.error('Error changing password:', error);
+            this.showAlert('Error changing password', 'error');
+        }
     }
 }
 

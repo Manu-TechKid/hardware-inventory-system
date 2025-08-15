@@ -16,6 +16,18 @@ router.get('/', (req, res) => {
     });
 });
 
+// Get active staff only
+router.get('/active', (req, res) => {
+    const query = 'SELECT * FROM staff WHERE status = "active" ORDER BY name';
+    
+    db.all(query, [], (err, staff) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(staff);
+    });
+});
+
 // Get single staff member
 router.get('/:id', (req, res) => {
     db.get('SELECT * FROM staff WHERE id = ?', [req.params.id], (err, staff) => {
@@ -190,18 +202,6 @@ router.patch('/:id/status', [
             return res.status(404).json({ error: 'Staff member not found' });
         }
         res.json({ message: 'Status updated successfully' });
-    });
-});
-
-// Get active staff only
-router.get('/active', (req, res) => {
-    const query = 'SELECT * FROM staff WHERE status = "active" ORDER BY name';
-    
-    db.all(query, [], (err, staff) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(staff);
     });
 });
 

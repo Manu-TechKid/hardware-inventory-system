@@ -16,6 +16,140 @@ router.get('/categories', (req, res) => {
     });
 });
 
+// Add new category
+router.post('/categories', [
+    body('name').notEmpty().withMessage('Category name is required')
+        .isLength({ min: 2, max: 50 }).withMessage('Category name must be between 2 and 50 characters')
+        .trim()
+        .escape()
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { name, description } = req.body;
+    const trimmedName = name.trim();
+    
+    // First check if category already exists (case-insensitive)
+    const checkQuery = 'SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(?)';
+    
+    db.get(checkQuery, [trimmedName], (err, existingCategory) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error while checking for duplicates' });
+        }
+        
+        if (existingCategory) {
+            return res.status(400).json({ 
+                error: 'Category name already exists',
+                message: `A category with the name "${trimmedName}" already exists.`
+            });
+        }
+        
+        // Insert new category
+        const insertQuery = 'INSERT INTO categories (name, description) VALUES (?, ?)';
+        
+        db.run(insertQuery, [trimmedName, description?.trim() || null], function(err) {
+            if (err) {
+                if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                    return res.status(400).json({ 
+                        error: 'Category name already exists',
+                        message: `A category with the name "${trimmedName}" already exists.`
+                    });
+                }
+                console.error('Error adding category:', err);
+                return res.status(500).json({ error: 'Failed to add category' });
+            }
+            
+            res.status(201).json({ 
+                success: true,
+                message: 'Category added successfully',
+                id: this.lastID,
+                category: {
+                    id: this.lastID,
+                    name: trimmedName,
+                    description: description?.trim() || null
+                }
+            });
+        });
+    });
+});
+
+// Delete category
+router.delete('/categories/:id', (req, res) => {
+    const categoryId = req.params.id;
+    
+    // Check if category is being used by any inventory items
+    db.get('SELECT COUNT(*) as count FROM inventory WHERE category_id = ?', [categoryId], (err, result) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        
+        if (result.count > 0) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Cannot delete category - it is being used by inventory items' 
+            });
+        }
+        
+        // Delete the category
+        db.run('DELETE FROM categories WHERE id = ?', [categoryId], function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to delete category' });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Category not found' });
+            }
+            res.json({ 
+                success: true,
+                message: 'Category deleted successfully' 
+            });
+        });
+    });
+});
+
+// Get single category
+router.get('/categories/:id', (req, res) => {
+    const categoryId = req.params.id;
+    
+    db.get('SELECT * FROM categories WHERE id = ?', [categoryId], (err, category) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        if (!category) {
+            return res.status(404).json({ error: 'Category not found' });
+        }
+        res.json(category);
+    });
+});
+
+// Update category
+router.put('/categories/:id', [
+    body('name').notEmpty().withMessage('Category name is required')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const categoryId = req.params.id;
+    const { name, description } = req.body;
+    
+    db.run('UPDATE categories SET name = ?, description = ? WHERE id = ?', 
+        [name, description, categoryId], function(err) {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to update category' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'Category not found' });
+        }
+        res.json({ 
+            success: true,
+            message: 'Category updated successfully' 
+        });
+    });
+});
+
 // Get all inventory items
 router.get('/', (req, res) => {
     const query = `
@@ -23,6 +157,24 @@ router.get('/', (req, res) => {
         FROM inventory i 
         LEFT JOIN categories c ON i.category_id = c.id 
         ORDER BY i.name
+    `;
+    
+    db.all(query, [], (err, items) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(items);
+    });
+});
+
+// Get low stock items
+router.get('/low-stock', (req, res) => {
+    const query = `
+        SELECT i.*, c.name as category_name 
+        FROM inventory i 
+        LEFT JOIN categories c ON i.category_id = c.id 
+        WHERE i.quantity <= i.min_quantity 
+        ORDER BY i.quantity ASC
     `;
     
     db.all(query, [], (err, items) => {
@@ -196,24 +348,6 @@ router.patch('/:id/stock', [
     });
 });
 
-// Get low stock items
-router.get('/low-stock', (req, res) => {
-    const query = `
-        SELECT i.*, c.name as category_name 
-        FROM inventory i 
-        LEFT JOIN categories c ON i.category_id = c.id 
-        WHERE i.quantity <= i.min_quantity 
-        ORDER BY i.quantity ASC
-    `;
-    
-    db.all(query, [], (err, items) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(items);
-    });
-});
-
 // Search inventory
 router.get('/search/:term', (req, res) => {
     const searchTerm = `%${req.params.term}%`;
@@ -229,8 +363,33 @@ router.get('/search/:term', (req, res) => {
         if (err) {
             return res.status(500).json({ error: 'Database error' });
         }
-        res.json(items);
+        res.json(items);        
     });
 });
 
-module.exports = router; 
+// Get low stock items for dashboard
+router.get('/low-stock', (req, res) => {
+    const query = `
+        SELECT 
+            i.id,
+            i.name,
+            i.sku,
+            i.quantity,
+            i.min_quantity,
+            c.name as category_name
+        FROM inventory i
+        LEFT JOIN categories c ON i.category_id = c.id
+        WHERE i.quantity <= i.min_quantity AND i.min_quantity > 0
+        ORDER BY (i.quantity - i.min_quantity) ASC
+    `;
+    
+    db.all(query, [], (err, lowStockItems) => {
+        if (err) {
+            console.error('Low stock query error:', err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(lowStockItems);
+    });
+});
+
+module.exports = router;
