@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
 
 // Get active staff only
 router.get('/active', (req, res) => {
-    const query = 'SELECT * FROM staff WHERE status = "active" ORDER BY name';
+    const query = "SELECT * FROM staff WHERE status = 'active' ORDER BY name";
     
     db.all(query, [], (err, staff) => {
         if (err) {
@@ -65,14 +65,27 @@ router.post('/', [
         salary
     } = req.body;
 
+    // Normalize values for PostgreSQL
+    const normalizedHireDate = hire_date ? (() => {
+        // Accept both YYYY-MM-DD and locale formats
+        const d = new Date(hire_date);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    })() : null;
+    const salaryNumber = (salary === undefined || salary === null || salary === '') ? null : Number(salary);
+
     const query = `
         INSERT INTO staff (name, email, phone, position, department, hire_date, salary)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
-    db.run(query, [name, email, phone, position, department, hire_date, salary], function(err) {
+    db.run(query, [name, email, phone, position, department, normalizedHireDate, salaryNumber], function(err) {
         if (err) {
-            return res.status(500).json({ error: 'Failed to add staff member' });
+            // Handle duplicate email for PostgreSQL (23505) and SQLite
+            if (err.code === '23505' || err.code === 'SQLITE_CONSTRAINT' || err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                return res.status(400).json({ error: 'Duplicate value', message: 'Email must be unique', code: err.code });
+            }
+            return res.status(500).json({ error: 'Failed to add staff member', message: err.message, code: err.code, detail: err.detail });
         }
         res.status(201).json({ 
             message: 'Staff member added successfully',
