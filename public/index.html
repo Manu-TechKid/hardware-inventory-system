@@ -783,7 +783,9 @@
                     <form id="addBudgetForm">
                         <div class="mb-3">
                             <label for="budgetCategory" class="form-label">Category</label>
-                            <input type="text" class="form-control" id="budgetCategory" required>
+                            <select class="form-select" id="budgetCategory" required>
+                                <option value="">Select Category</option>
+                            </select>
                         </div>
                         <div class="row">
                             <div class="col-md-6">
@@ -1038,7 +1040,9 @@
                         <input type="hidden" id="editBudgetId">
                         <div class="mb-3">
                             <label for="editBudgetCategory" class="form-label">Category</label>
-                            <input type="text" class="form-control" id="editBudgetCategory" required>
+                            <select class="form-select" id="editBudgetCategory" required>
+                                <option value="">Select Category</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label for="editBudgetAmount" class="form-label">Amount (KSH)</label>
