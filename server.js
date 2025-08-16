@@ -9,6 +9,8 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Also accept URL-encoded bodies (e.g., if a client posts as form data)
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Database initialization
