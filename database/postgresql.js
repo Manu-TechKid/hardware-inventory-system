@@ -15,12 +15,18 @@ const initializeDatabase = async () => {
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(100) UNIQUE,
                 password VARCHAR(255) NOT NULL,
                 role VARCHAR(20) DEFAULT 'staff',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        // Ensure email is nullable if the table already existed with NOT NULL
+        try {
+            await client.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
+        } catch (e) {
+            // ignore if already nullable or column state cannot be changed
+        }
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS categories (
