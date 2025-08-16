@@ -1,15 +1,27 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+// Check if we should use PostgreSQL or SQLite
+if (process.env.DATABASE_URL) {
+    // Use PostgreSQL for production
+    module.exports = require('./postgresql');
+} else {
+    // Use SQLite for local development
+    const sqlite3 = require('sqlite3').verbose();
+    const path = require('path');
 
-// Create database file
-const dbPath = path.join(__dirname, 'hardware_inventory.db');
-const db = new sqlite3.Database(dbPath);
+    const dbPath = path.join(__dirname, 'hardware_inventory.db');
+    const db = new sqlite3.Database(dbPath);
 
-// Initialize database tables
-const initializeDatabase = () => {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            // Users table for authentication
+    // Initialize database tables
+    const initializeDatabase = () => {
+        return new Promise((resolve, reject) => {
+            db.serialize(() => {
+                // Users table for authentication
+                db.run(`CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT DEFAULT 'staff',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`);
             db.run(`CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
@@ -128,4 +140,5 @@ const initializeDatabase = () => {
 // Initialize the database
 initializeDatabase().catch(console.error);
 
-module.exports = db; 
+    module.exports = db;
+} 

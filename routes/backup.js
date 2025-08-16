@@ -81,4 +81,73 @@ router.get('/view/:table', (req, res) => {
     });
 });
 
+// API endpoint to restore data TO live site
+router.post('/restore', async (req, res) => {
+    try {
+        const backupData = req.body;
+        
+        if (!backupData || !backupData.data) {
+            return res.status(400).json({ error: 'Invalid backup data format' });
+        }
+
+        const results = {};
+        const tablesToRestore = ['categories', 'inventory', 'sales', 'staff', 'budget'];
+
+        // Clear existing data first (except users for security)
+        for (const table of tablesToRestore) {
+            await new Promise((resolve) => {
+                db.run(`DELETE FROM ${table}`, [], (err) => {
+                    if (err) {
+                        console.log(`Warning: Could not clear ${table} - ${err.message}`);
+                    }
+                    resolve();
+                });
+            });
+        }
+
+        // Restore data for each table
+        for (const [tableName, records] of Object.entries(backupData.data)) {
+            if (!tablesToRestore.includes(tableName) || !records || records.length === 0) {
+                results[tableName] = { status: 'skipped', count: 0 };
+                continue;
+            }
+
+            const columns = Object.keys(records[0]);
+            const placeholders = columns.map(() => '?').join(', ');
+            const query = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+
+            let restored = 0;
+            for (const record of records) {
+                const values = columns.map(col => record[col]);
+                
+                await new Promise((resolve) => {
+                    db.run(query, values, function(err) {
+                        if (err) {
+                            console.log(`Warning: Could not restore record in ${tableName} - ${err.message}`);
+                        } else {
+                            restored++;
+                        }
+                        resolve();
+                    });
+                });
+            }
+            
+            results[tableName] = { 
+                status: 'completed', 
+                restored: restored, 
+                total: records.length 
+            };
+        }
+
+        res.json({
+            message: 'Database restore completed',
+            timestamp: new Date().toISOString(),
+            results: results
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: 'Restore failed', message: error.message });
+    }
+});
+
 module.exports = router;
