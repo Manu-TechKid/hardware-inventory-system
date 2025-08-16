@@ -66,7 +66,18 @@ router.get('/sales-summary', (req, res) => {
 // Get sales by date range
 router.get('/sales-by-date/:start/:end', (req, res) => {
     const { start, end } = req.params;
-    const query = `
+    const isPg = !!process.env.DATABASE_URL;
+    const query = isPg ? `
+        SELECT 
+            sale_date::date as date,
+            COUNT(*) as sales_count,
+            SUM(total_price) as revenue,
+            SUM(quantity) as items_sold
+        FROM sales
+        WHERE sale_date BETWEEN ? AND ?
+        GROUP BY sale_date::date
+        ORDER BY date
+    ` : `
         SELECT 
             DATE(sale_date) as date,
             COUNT(*) as sales_count,
@@ -181,11 +192,12 @@ router.get('/customer-history/:customerName', (req, res) => {
     const query = `
         SELECT 
             s.sale_date,
-            s.item_name,
+            i.name as item_name,
             s.quantity,
             s.total_price,
             s.payment_method
         FROM sales s
+        JOIN inventory i ON s.item_id = i.id
         WHERE s.customer_name LIKE ?
         ORDER BY s.sale_date DESC
     `;
@@ -201,7 +213,17 @@ router.get('/customer-history/:customerName', (req, res) => {
 // Get monthly trend
 router.get('/monthly-trend/:year', (req, res) => {
     const { year } = req.params;
-    const query = `
+    const isPg = !!process.env.DATABASE_URL;
+    const query = isPg ? `
+        SELECT 
+            to_char(sale_date, 'MM') as month,
+            SUM(total_price) as revenue,
+            COUNT(*) as sales_count
+        FROM sales
+        WHERE to_char(sale_date, 'YYYY') = ?
+        GROUP BY to_char(sale_date, 'MM')
+        ORDER BY month
+    ` : `
         SELECT 
             strftime('%m', sale_date) as month,
             SUM(total_price) as revenue,
@@ -349,7 +371,18 @@ router.get('/comprehensive', (req, res) => {
 // New chart endpoints
 // Get daily sales for chart
 router.get('/daily-sales', (req, res) => {
-    const query = `
+    const isPg = !!process.env.DATABASE_URL;
+    const query = isPg ? `
+        SELECT 
+            sale_date::date as date,
+            SUM(total_price) as revenue,
+            COUNT(*) as sales_count
+        FROM sales
+        WHERE sale_date >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY sale_date::date
+        ORDER BY date DESC
+        LIMIT 30
+    ` : `
         SELECT 
             DATE(sale_date) as date,
             SUM(total_price) as revenue,
@@ -371,7 +404,16 @@ router.get('/daily-sales', (req, res) => {
 
 // Get yearly revenue for chart
 router.get('/yearly-revenue', (req, res) => {
-    const query = `
+    const isPg = !!process.env.DATABASE_URL;
+    const query = isPg ? `
+        SELECT 
+            to_char(sale_date, 'YYYY') as year,
+            SUM(total_price) as revenue,
+            COUNT(*) as sales_count
+        FROM sales
+        GROUP BY to_char(sale_date, 'YYYY')
+        ORDER BY year
+    ` : `
         SELECT 
             strftime('%Y', sale_date) as year,
             SUM(total_price) as revenue,

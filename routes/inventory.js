@@ -51,7 +51,7 @@ router.post('/categories', [
         
         db.run(insertQuery, [trimmedName, description?.trim() || null], function(err) {
             if (err) {
-                if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === '23505') {
                     return res.status(400).json({ 
                         error: 'Category name already exists',
                         message: `A category with the name "${trimmedName}" already exists.`
@@ -134,18 +134,39 @@ router.put('/categories/:id', [
 
     const categoryId = req.params.id;
     const { name, description } = req.body;
-    
-    db.run('UPDATE categories SET name = ?, description = ? WHERE id = ?', 
-        [name, description, categoryId], function(err) {
+    const trimmedName = name.trim();
+
+    // Prevent duplicates: check other categories with same normalized name
+    const checkQuery = 'SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(?) AND id != ?';
+    db.get(checkQuery, [trimmedName, categoryId], (err, existing) => {
         if (err) {
-            return res.status(500).json({ error: 'Failed to update category' });
+            return res.status(500).json({ error: 'Database error while checking for duplicates' });
         }
-        if (this.changes === 0) {
-            return res.status(404).json({ error: 'Category not found' });
+        if (existing) {
+            return res.status(400).json({
+                error: 'Category name already exists',
+                message: `A category with the name "${trimmedName}" already exists.`
+            });
         }
-        res.json({ 
-            success: true,
-            message: 'Category updated successfully' 
+
+        db.run('UPDATE categories SET name = ?, description = ? WHERE id = ?', 
+            [trimmedName, description?.trim() || null, categoryId], function(err) {
+            if (err) {
+                if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === '23505') {
+                    return res.status(400).json({
+                        error: 'Category name already exists',
+                        message: `A category with the name "${trimmedName}" already exists.`
+                    });
+                }
+                return res.status(500).json({ error: 'Failed to update category' });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Category not found' });
+            }
+            res.json({ 
+                success: true,
+                message: 'Category updated successfully' 
+            });
         });
     });
 });
