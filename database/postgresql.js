@@ -9,7 +9,6 @@ const pool = new Pool({
 // Initialize PostgreSQL tables
 const initializeDatabase = async () => {
     const client = await pool.connect();
-    
     try {
         // Create tables if they don't exist
         await client.query(`
@@ -91,7 +90,6 @@ const initializeDatabase = async () => {
         `);
 
         console.log('✅ PostgreSQL database initialized successfully');
-        
     } catch (error) {
         console.error('❌ Error initializing PostgreSQL database:', error);
     } finally {
@@ -99,8 +97,51 @@ const initializeDatabase = async () => {
     }
 };
 
-// Export pool for queries
+// Helper: translate SQLite-style '?' placeholders to PostgreSQL $1, $2, ...
+function mapPlaceholders(sql, params) {
+    if (!params || params.length === 0) return { text: sql, values: params };
+    let index = 0;
+    const text = sql.replace(/\?/g, () => {
+        index += 1;
+        return `$${index}`;
+    });
+    return { text, values: params };
+}
+
+// SQLite-compatible adapter so existing routes keep working
+function all(sql, params = [], cb) {
+    const { text, values } = mapPlaceholders(sql, params);
+    pool
+        .query(text, values)
+        .then(({ rows }) => cb && cb(null, rows))
+        .catch(err => cb && cb(err));
+}
+
+function get(sql, params = [], cb) {
+    const { text, values } = mapPlaceholders(sql, params);
+    pool
+        .query(text, values)
+        .then(({ rows }) => cb && cb(null, rows && rows.length ? rows[0] : undefined))
+        .catch(err => cb && cb(err));
+}
+
+function run(sql, params = [], cb) {
+    const { text, values } = mapPlaceholders(sql, params);
+    pool
+        .query(text, values)
+        .then(result => cb && cb(null, { rowCount: result.rowCount }))
+        .catch(err => cb && cb(err));
+}
+
+// Run initialization when module is required
+initializeDatabase().catch(console.error);
+
 module.exports = {
+    // sqlite-like surface used by routes
+    all,
+    get,
+    run,
+    // direct access helpers
     pool,
     initializeDatabase,
     query: (text, params) => pool.query(text, params)

@@ -23,6 +23,16 @@ app.use('/api/budget', require('./routes/budget'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/backup', require('./routes/backup'));
 
+// Simple DB healthcheck endpoint
+app.get('/api/health', (req, res) => {
+    db.get('SELECT 1 AS ok', [], (err, row) => {
+        if (err) {
+            return res.status(500).json({ status: 'unhealthy', error: err.message });
+        }
+        res.json({ status: 'healthy', db: row && row.ok === 1 ? 'connected' : 'unknown' });
+    });
+});
+
 // Serve the main application
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
