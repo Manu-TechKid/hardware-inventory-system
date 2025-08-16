@@ -2,13 +2,19 @@
 
 class HardwareInventorySystem {
     constructor() {
-        this.token = localStorage.getItem('token');
-        this.currentUser = JSON.parse(localStorage.getItem('user'));
+        this.token = localStorage.getItem('token') || null;
+        this.currentUser = JSON.parse(localStorage.getItem('user') || 'null');
         this.currentSection = 'dashboard';
         this.inventory = [];
         this.sales = [];
         this.staff = [];
         this.budgets = [];
+        // Lightweight caches to speed up UI
+        this.cache = {
+            categories: { data: null, ts: 0 },
+            staff: { data: null, ts: 0 },
+            inventory: { data: null, ts: 0 }
+        };
         
         this.init();
     }
@@ -145,11 +151,27 @@ class HardwareInventorySystem {
         }
         const addBudgetModalEl = document.getElementById('addBudgetModal');
         if (addBudgetModalEl) {
-            addBudgetModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+            addBudgetModalEl.addEventListener('show.bs.modal', () => {
+                this.loadCategories();
+                // Set default month to current if empty
+                const monthInput = document.getElementById('budgetMonth');
+                if (monthInput && !monthInput.value) {
+                    const now = new Date();
+                    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                    monthInput.value = ym;
+                }
+            });
         }
         const editBudgetModalEl = document.getElementById('editBudgetModal');
         if (editBudgetModalEl) {
             editBudgetModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+        }
+        const addSaleModalEl = document.getElementById('addSaleModal');
+        if (addSaleModalEl) {
+            addSaleModalEl.addEventListener('show.bs.modal', () => {
+                this.loadInventoryForSelect();
+                this.loadStaffForSelect();
+            });
         }
     }
 
@@ -323,6 +345,7 @@ class HardwareInventorySystem {
             this.inventory = await this.fetchData('/api/inventory');
             this.displayInventory(this.inventory);
             this.loadCategories();
+            this.cache.inventory = { data: this.inventory, ts: Date.now() };
         } catch (error) {
             console.error('Error loading inventory:', error);
         }
@@ -343,6 +366,7 @@ class HardwareInventorySystem {
         try {
             this.staff = await this.fetchData('/api/staff');
             this.displayStaff(this.staff);
+            this.cache.staff = { data: this.staff, ts: Date.now() };
         } catch (error) {
             console.error('Error loading staff:', error);
         }
@@ -386,30 +410,70 @@ class HardwareInventorySystem {
             if (!itemSelect) return;
 
             // Prefer cached inventory if available; otherwise fetch fresh
-            const inventory = (this.inventory && Array.isArray(this.inventory) && this.inventory.length)
-                ? this.inventory
-                : await this.fetchData('/api/inventory');
+            let inventory = (this.inventory && Array.isArray(this.inventory) && this.inventory.length)
+                ? this.inventory : null;
+            if (!inventory) {
+                // use cache if fresh (<60s)
+                if (this.cache.inventory.data && Date.now() - this.cache.inventory.ts < 60000) {
+                    inventory = this.cache.inventory.data;
+                } else {
+                    inventory = await this.fetchData('/api/inventory');
+                    this.cache.inventory = { data: inventory, ts: Date.now() };
+                }
+            }
 
             itemSelect.innerHTML = '<option value="">Select Item</option>';
             inventory.forEach(item => {
-                if ((item.quantity || 0) > 0) {
-                    itemSelect.innerHTML += `<option value="${item.id}" data-price="${item.unit_price}">${item.name} (${item.quantity} in stock)</option>`;
-                }
+                const qty = Number(item.quantity || 0);
+                const disabled = qty <= 0 ? 'disabled' : '';
+                const stockText = qty <= 0 ? 'out of stock' : `${qty} in stock`;
+                itemSelect.innerHTML += `<option value="${item.id}" data-price="${item.unit_price}" ${disabled}>${item.name} (${stockText})</option>`;
             });
         } catch (error) {
             console.error('Error loading inventory for select:', error);
         }
     }
 
+    // Populate staff select in sales modal
+    async loadStaffForSelect() {
+        try {
+            const staffSelect = document.getElementById('saleStaff');
+            if (!staffSelect) return;
+
+            let staff = (this.staff && Array.isArray(this.staff) && this.staff.length) ? this.staff : null;
+            if (!staff) {
+                if (this.cache.staff.data && Date.now() - this.cache.staff.ts < 60000) {
+                    staff = this.cache.staff.data;
+                } else {
+                    staff = await this.fetchData('/api/staff');
+                    this.cache.staff = { data: staff, ts: Date.now() };
+                }
+            }
+
+            staffSelect.innerHTML = '<option value="">Select Staff</option>';
+            staff.forEach(member => {
+                staffSelect.innerHTML += `<option value="${member.id}">${member.name}</option>`;
+            });
+        } catch (error) {
+            console.error('Error loading staff for select:', error);
+        }
+    }
+
     // Load categories for all relevant selects
     async loadCategories() {
         try {
-            let categories = [];
-            try {
-                categories = await this.fetchData('/api/inventory/categories');
-            } catch (e) {
-                // Fallback if routes are mounted differently
-                categories = await this.fetchData('/api/categories');
+            let categories = null;
+            // use cache if fresh (<60s)
+            if (this.cache.categories.data && Date.now() - this.cache.categories.ts < 60000) {
+                categories = this.cache.categories.data;
+            } else {
+                try {
+                    categories = await this.fetchData('/api/inventory/categories');
+                } catch (e) {
+                    // Fallback if routes are mounted differently
+                    categories = await this.fetchData('/api/categories');
+                }
+                this.cache.categories = { data: categories, ts: Date.now() };
             }
 
             // Inventory selects use ID values
@@ -826,27 +890,37 @@ class HardwareInventorySystem {
     }
 
     async addBudget() {
-        const formData = {
-            category: document.getElementById('budgetCategory').value,
-            amount: parseFloat(document.getElementById('budgetAmount').value),
-            month_year: document.getElementById('budgetMonth').value
-        };
+        const category = document.getElementById('budgetCategory').value;
+        const amount = parseFloat(document.getElementById('budgetAmount').value);
+        const month_year = document.getElementById('budgetMonth').value;
+
+        if (!category) return this.showAlert('Please select a category.', 'danger');
+        if (!(amount > 0)) return this.showAlert('Please enter a valid amount.', 'danger');
+        if (!month_year) return this.showAlert('Please select a month.', 'danger');
+
+        const btn = document.querySelector('#addBudgetForm button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.innerText = 'Adding...'; }
 
         try {
             const response = await this.fetchData('/api/budget', {
                 method: 'POST',
-                body: JSON.stringify(formData)
+                body: JSON.stringify({ category, amount, month_year })
             });
 
-            if (response.id) {
+            if (response && response.id) {
                 this.showAlert('Budget added successfully!', 'success');
                 document.getElementById('addBudgetForm').reset();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('addBudgetModal'));
-                modal.hide();
+                if (modal) modal.hide();
                 this.loadBudget();
+            } else {
+                this.showAlert('Unexpected response from server when adding budget.', 'danger');
             }
         } catch (error) {
-            this.showAlert('Failed to add budget. Please try again.', 'danger');
+            console.error('Add budget error:', error);
+            this.showAlert(error.message || 'Failed to add budget. Please try again.', 'danger');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = 'Add Budget'; }
         }
     }
 
@@ -1127,7 +1201,9 @@ class HardwareInventorySystem {
     async editBudget(id) {
         try {
             const budget = await this.fetchData(`/api/budget/${id}`);
-            
+            // Ensure categories are present before setting value
+            await this.loadCategories();
+
             // Populate edit form
             document.getElementById('editBudgetId').value = budget.id;
             document.getElementById('editBudgetCategory').value = budget.category;
@@ -1139,7 +1215,7 @@ class HardwareInventorySystem {
             modal.show();
         } catch (error) {
             console.error('Error loading budget for edit:', error);
-            this.showAlert('Failed to load budget details', 'error');
+            this.showAlert(error.message || 'Failed to load budget details', 'danger');
         }
     }
 
@@ -1181,16 +1257,24 @@ class HardwareInventorySystem {
         };
 
         const response = await fetch(url, config);
-        
+
+        const parseBody = async () => {
+            const text = await response.text();
+            try { return text ? JSON.parse(text) : null; } catch { return text; }
+        };
+
         if (!response.ok) {
             if (response.status === 401) {
                 this.logout();
-                return;
+                return Promise.reject(new Error('Unauthorized'));
             }
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const body = await parseBody();
+            const msg = (body && (body.error || body.message)) ? (body.error || body.message) : `HTTP ${response.status}`;
+            throw new Error(msg);
         }
 
-        return await response.json();
+        const body = await parseBody();
+        return body;
     }
 
     showAlert(message, type) {
