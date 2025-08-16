@@ -409,6 +409,27 @@ class HardwareInventorySystem {
         }
     }
 
+    async loadInventoryForSelect() {
+        try {
+            const itemSelect = document.getElementById('saleItem');
+            if (!itemSelect) return;
+
+            // Prefer cached inventory if available; otherwise fetch fresh
+            const inventory = (this.inventory && Array.isArray(this.inventory) && this.inventory.length)
+                ? this.inventory
+                : await this.fetchData('/api/inventory');
+
+            itemSelect.innerHTML = '<option value="">Select Item</option>';
+            inventory.forEach(item => {
+                if ((item.quantity || 0) > 0) {
+                    itemSelect.innerHTML += `<option value="${item.id}" data-price="${item.unit_price}">${item.name} (${item.quantity} in stock)</option>`;
+                }
+            });
+        } catch (error) {
+            console.error('Error loading inventory for select:', error);
+        }
+    }
+
     // Display functions
     displayInventory(inventory) {
         const tbody = document.getElementById('inventoryTable');
@@ -710,6 +731,9 @@ class HardwareInventorySystem {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
                 modal.hide();
                 this.loadInventory();
+                if (this.currentSection === 'sales') {
+                    await this.loadInventoryForSelect();
+                }
             }
         } catch (error) {
             this.showAlert('Failed to add item. Please try again.', 'danger');
@@ -855,6 +879,9 @@ class HardwareInventorySystem {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('editItemModal'));
                 modal.hide();
                 this.loadInventory();
+                if (this.currentSection === 'sales') {
+                    await this.loadInventoryForSelect();
+                }
             }
         } catch (error) {
             this.showAlert('Failed to update item. Please try again.', 'danger');
@@ -894,6 +921,9 @@ class HardwareInventorySystem {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('updateStockModal'));
                 modal.hide();
                 this.loadInventory();
+                if (this.currentSection === 'sales') {
+                    await this.loadInventoryForSelect();
+                }
             }
         } catch (error) {
             this.showAlert('Failed to update stock. Please try again.', 'danger');
@@ -912,6 +942,9 @@ class HardwareInventorySystem {
             if (response.message) {
                 this.showAlert('Item deleted successfully!', 'success');
                 this.loadInventory();
+                if (this.currentSection === 'sales') {
+                    await this.loadInventoryForSelect();
+                }
             }
         } catch (error) {
             this.showAlert('Failed to delete item. Please try again.', 'danger');
@@ -1720,7 +1753,7 @@ class HardwareInventorySystem {
                 }
                 // Refresh sales dropdown if we're on sales page
                 if (this.currentSection === 'sales') {
-                    await this.loadStaffForSelect();
+                    await this.loadInventoryForSelect();
                 }
             } else {
                 this.showAlert('Failed to add item', 'error');

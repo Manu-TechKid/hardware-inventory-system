@@ -16,7 +16,7 @@ router.get('/', (req, res) => {
     
     db.all(query, [], (err, sales) => {
         if (err) {
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: 'Database error', message: err.message });
         }
         res.json(sales);
     });
@@ -35,7 +35,7 @@ router.get('/summary', (req, res) => {
     
     db.get(query, [], (err, summary) => {
         if (err) {
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: 'Database error', message: err.message });
         }
         res.json(summary);
     });
@@ -58,7 +58,7 @@ router.get('/top-items', (req, res) => {
     
     db.all(query, [], (err, items) => {
         if (err) {
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: 'Database error', message: err.message });
         }
         res.json(items);
     });
@@ -76,7 +76,7 @@ router.get('/:id', (req, res) => {
     
     db.get(query, [req.params.id], (err, sale) => {
         if (err) {
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: 'Database error', message: err.message });
         }
         if (!sale) {
             return res.status(404).json({ error: 'Sale not found' });
@@ -114,7 +114,7 @@ router.post('/', [
     // First check if item exists and has sufficient stock
     db.get('SELECT quantity FROM inventory WHERE id = ?', [item_id], (err, item) => {
         if (err) {
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: 'Database error', message: err.message });
         }
         if (!item) {
             return res.status(404).json({ error: 'Item not found' });
@@ -131,7 +131,8 @@ router.post('/', [
 
         db.run(saleQuery, [item_id, quantity, unit_price, total_price, customer_name, customer_phone, staff_id, payment_method, notes], function(err) {
             if (err) {
-                return res.status(500).json({ error: 'Failed to record sale' });
+                console.error('Sale insert error:', err);
+                return res.status(500).json({ error: 'Failed to record sale', message: err.message, code: err.code, detail: err.detail });
             }
 
             // Update inventory quantity
@@ -139,7 +140,7 @@ router.post('/', [
             db.run('UPDATE inventory SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
                 [newQuantity, item_id], function(err) {
                 if (err) {
-                    return res.status(500).json({ error: 'Failed to update inventory' });
+                    return res.status(500).json({ error: 'Failed to update inventory', message: err.message });
                 }
 
                 res.status(201).json({ 
