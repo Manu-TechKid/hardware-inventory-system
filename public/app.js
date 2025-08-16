@@ -1269,7 +1269,11 @@ class HardwareInventorySystem {
                 return Promise.reject(new Error('Unauthorized'));
             }
             const body = await parseBody();
-            const msg = (body && (body.error || body.message)) ? (body.error || body.message) : `HTTP ${response.status}`;
+            let msg = `HTTP ${response.status}`;
+            if (body) {
+                if (body.error || body.message) msg = body.error || body.message;
+                else if (Array.isArray(body.errors) && body.errors.length) msg = body.errors[0].msg || msg;
+            }
             throw new Error(msg);
         }
 
