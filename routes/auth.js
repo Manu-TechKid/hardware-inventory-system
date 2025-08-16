@@ -21,7 +21,7 @@ router.post('/login', [
 
         db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
             if (err) {
-                return res.status(500).json({ error: 'Database error' });
+                return res.status(500).json({ error: 'Database error', message: err.message });
             }
 
             if (!user) {
@@ -70,7 +70,7 @@ router.post('/register', [
         // Check if user already exists
         db.get('SELECT id FROM users WHERE username = ?', [username], async (err, existingUser) => {
             if (err) {
-                return res.status(500).json({ error: 'Database error' });
+                return res.status(500).json({ error: 'Database error', message: err.message });
             }
 
             if (existingUser) {
@@ -84,9 +84,13 @@ router.post('/register', [
             db.run('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', 
                 [username, hashedPassword, role], function(err) {
                 if (err) {
-                    return res.status(500).json({ error: 'Failed to create user' });
+                    // Handle unique violation (PostgreSQL)
+                    if (err.code === '23505') {
+                        return res.status(400).json({ error: 'Username already exists' });
+                    }
+                    return res.status(500).json({ error: 'Failed to create user', message: err.message });
                 }
-
+                
                 res.status(201).json({ 
                     message: 'User created successfully',
                     userId: this.lastID 
@@ -136,7 +140,7 @@ router.post('/change-password', [
         // Get user from database
         db.get('SELECT * FROM users WHERE id = ?', [decoded.userId], async (err, user) => {
             if (err) {
-                return res.status(500).json({ error: 'Database error' });
+                return res.status(500).json({ error: 'Database error', message: err.message });
             }
 
             if (!user) {
