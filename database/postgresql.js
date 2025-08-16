@@ -132,10 +132,32 @@ function get(sql, params = [], cb) {
 }
 
 function run(sql, params = [], cb) {
-    const { text, values } = mapPlaceholders(sql, params);
+    let { text, values } = mapPlaceholders(sql, params);
+    const upper = text.trim().toUpperCase();
+    const isInsert = upper.startsWith('INSERT');
+    const isUpdate = upper.startsWith('UPDATE');
+    const isDelete = upper.startsWith('DELETE');
+
+    // For INSERT statements, append RETURNING id if not already present to emulate sqlite lastID
+    if (isInsert && !/RETURNING\s+\w+/i.test(text)) {
+        text = `${text} RETURNING id`;
+    }
+
     pool
         .query(text, values)
-        .then(result => cb && cb(null, { rowCount: result.rowCount }))
+        .then(result => {
+            const response = {
+                rowCount: result.rowCount,
+                changes: (isUpdate || isDelete) ? result.rowCount : result.rowCount
+            };
+            if (isInsert) {
+                const first = result.rows && result.rows[0];
+                if (first && (first.id !== undefined)) {
+                    response.lastID = first.id;
+                }
+            }
+            cb && cb(null, response);
+        })
         .catch(err => cb && cb(err));
 }
 
