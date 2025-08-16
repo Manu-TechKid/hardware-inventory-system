@@ -134,6 +134,8 @@ router.post('/', [
                 console.error('Sale insert error:', err);
                 return res.status(500).json({ error: 'Failed to record sale', message: err.message, code: err.code, detail: err.detail });
             }
+            // Capture the newly inserted sale ID from this callback context (sqlite) or adapter (postgres)
+            const insertedSaleId = this && this.lastID !== undefined ? this.lastID : undefined;
 
             // Update inventory quantity
             const newQuantity = item.quantity - quantity;
@@ -145,7 +147,7 @@ router.post('/', [
 
                 res.status(201).json({ 
                     message: 'Sale recorded successfully',
-                    saleId: this.lastID,
+                    saleId: insertedSaleId,
                     newQuantity
                 });
             });

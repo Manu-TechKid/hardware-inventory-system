@@ -255,15 +255,30 @@ class HardwareInventorySystem {
                 this.fetchData('/api/inventory/low-stock')
             ]);
 
+            // Compute total items with a fallback to inventory list length if needed
+            let totalItemsCount = (inventorySummary && inventorySummary.total_items != null)
+                ? Number(inventorySummary.total_items)
+                : null;
+            if (totalItemsCount == null || Number.isNaN(totalItemsCount)) {
+                try {
+                    const inventoryList = await this.fetchData('/api/inventory');
+                    totalItemsCount = Array.isArray(inventoryList) ? inventoryList.length : 0;
+                } catch (e) {
+                    totalItemsCount = 0;
+                }
+            }
+
             // Update dashboard stats
-            document.getElementById('totalItems').textContent = inventorySummary.total_items || 0;
-            document.getElementById('totalSales').textContent = `KSH ${(salesSummary.total_revenue || 0).toFixed(2)}`;
-            document.getElementById('lowStockItems').textContent = inventorySummary.low_stock_items || 0;
-            document.getElementById('activeStaff').textContent = staffSummary.length || 0;
+            document.getElementById('totalItems').textContent = totalItemsCount;
+            const totalRevenue = (salesSummary && salesSummary.total_revenue) ? Number(salesSummary.total_revenue) : 0;
+            document.getElementById('totalSales').textContent = `KSH ${totalRevenue.toFixed(2)}`;
+            const lowStockCount = (inventorySummary && inventorySummary.low_stock_items != null) ? Number(inventorySummary.low_stock_items) : 0;
+            document.getElementById('lowStockItems').textContent = lowStockCount;
+            document.getElementById('activeStaff').textContent = Array.isArray(staffSummary) ? staffSummary.length : 0;
 
             // Load recent sales
-            this.displayRecentSales(recentSales.slice(0, 5));
-            this.displayLowStockAlerts(lowStock.slice(0, 5));
+            this.displayRecentSales((recentSales || []).slice(0, 5));
+            this.displayLowStockAlerts((lowStock || []).slice(0, 5));
 
             // Load charts
             this.loadDashboardCharts();

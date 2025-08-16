@@ -250,18 +250,34 @@ router.post('/', [
         location
     } = req.body;
 
-    const query = `
-        INSERT INTO inventory (name, description, category_id, sku, quantity, min_quantity, unit_price, supplier, location)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    const trimmedName = (name || '').trim();
 
-    db.run(query, [name, description, category_id, sku, quantity, min_quantity, unit_price, supplier, location], function(err) {
+    // Prevent duplicate item names (case-insensitive)
+    const checkQuery = 'SELECT id FROM inventory WHERE LOWER(TRIM(name)) = LOWER(?)';
+    db.get(checkQuery, [trimmedName], (err, existing) => {
         if (err) {
-            return res.status(500).json({ error: 'Failed to add item', message: err.message });
+            return res.status(500).json({ error: 'Database error while checking for duplicate item name' });
         }
-        res.status(201).json({ 
-            message: 'Item added successfully',
-            id: this.lastID 
+        if (existing) {
+            return res.status(400).json({
+                error: 'Duplicate item name',
+                message: `An item named "${trimmedName}" already exists. Please use a different name.`
+            });
+        }
+
+        const query = `
+            INSERT INTO inventory (name, description, category_id, sku, quantity, min_quantity, unit_price, supplier, location)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        db.run(query, [trimmedName, description, category_id, sku, quantity, min_quantity, unit_price, supplier, location], function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to add item', message: err.message });
+            }
+            res.status(201).json({ 
+                message: 'Item added successfully',
+                id: this.lastID 
+            });
         });
     });
 });
@@ -293,19 +309,39 @@ router.put('/:id', [
     }
 
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
+    const runUpdate = () => {
+        values.push(id);
+        const query = `UPDATE inventory SET ${updateFields.join(', ')} WHERE id = ?`;
+        db.run(query, values, function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to update item' });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            res.json({ message: 'Item updated successfully' });
+        });
+    };
 
-    const query = `UPDATE inventory SET ${updateFields.join(', ')} WHERE id = ?`;
-
-    db.run(query, values, function(err) {
-        if (err) {
-            return res.status(500).json({ error: 'Failed to update item' });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ error: 'Item not found' });
-        }
-        res.json({ message: 'Item updated successfully' });
-    });
+    // If name is being changed, ensure no duplicates (case-insensitive)
+    if (Object.prototype.hasOwnProperty.call(req.body, 'name') && req.body.name) {
+        const trimmedName = req.body.name.trim();
+        const checkQuery = 'SELECT id FROM inventory WHERE LOWER(TRIM(name)) = LOWER(?) AND id != ?';
+        db.get(checkQuery, [trimmedName, id], (err, existing) => {
+            if (err) {
+                return res.status(500).json({ error: 'Database error while checking for duplicate item name' });
+            }
+            if (existing) {
+                return res.status(400).json({
+                    error: 'Duplicate item name',
+                    message: `An item named "${trimmedName}" already exists. Please use a different name.`
+                });
+            }
+            runUpdate();
+        });
+    } else {
+        runUpdate();
+    }
 });
 
 // Delete inventory item

@@ -165,7 +165,11 @@ function run(sql, params = [], cb) {
                     response.lastID = first.id;
                 }
             }
-            cb && cb(null, response);
+            // Emulate sqlite3's callback context where `this` has lastID/changes
+            // Many existing routes expect `this.lastID` and `this.changes` inside the callback
+            if (cb) {
+                cb.call(response, null);
+            }
         })
         .catch(err => cb && cb(err));
 }
