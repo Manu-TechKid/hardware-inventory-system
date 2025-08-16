@@ -41,16 +41,23 @@ const initializeDatabase = async () => {
             CREATE TABLE IF NOT EXISTS inventory (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(200) NOT NULL,
+                description TEXT,
                 category_id INTEGER REFERENCES categories(id),
+                sku VARCHAR(100),
                 quantity INTEGER DEFAULT 0,
+                min_quantity INTEGER DEFAULT 0,
                 unit_price DECIMAL(10,2) DEFAULT 0.00,
                 supplier VARCHAR(200),
                 location VARCHAR(100),
-                minimum_stock INTEGER DEFAULT 10,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        // Backward compatibility: add/rename columns if an older schema exists
+        try { await client.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS description TEXT`); } catch (e) {}
+        try { await client.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS sku VARCHAR(100)`); } catch (e) {}
+        try { await client.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS min_quantity INTEGER DEFAULT 0`); } catch (e) {}
+        try { await client.query(`ALTER TABLE inventory RENAME COLUMN minimum_stock TO min_quantity`); } catch (e) {}
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS staff (
