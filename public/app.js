@@ -16,6 +16,7 @@ class HardwareInventorySystem {
     init() {
         this.setupEventListeners();
         this.checkAuth();
+        // Initial attempt (may fail pre-auth; we also repopulate post-login and on modal open)
         this.loadCategories();
     }
 
@@ -132,6 +133,24 @@ class HardwareInventorySystem {
         document.getElementById('saleItem').addEventListener('change', (e) => {
             this.updateSalePrice();
         });
+
+        // Repopulate categories whenever relevant modals open
+        const addItemModalEl = document.getElementById('addItemModal');
+        if (addItemModalEl) {
+            addItemModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+        }
+        const editItemModalEl = document.getElementById('editItemModal');
+        if (editItemModalEl) {
+            editItemModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+        }
+        const addBudgetModalEl = document.getElementById('addBudgetModal');
+        if (addBudgetModalEl) {
+            addBudgetModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+        }
+        const editBudgetModalEl = document.getElementById('editBudgetModal');
+        if (editBudgetModalEl) {
+            editBudgetModalEl.addEventListener('show.bs.modal', () => this.loadCategories());
+        }
     }
 
     checkAuth() {
@@ -182,6 +201,8 @@ class HardwareInventorySystem {
                 
                 this.showApp();
                 this.loadDashboard();
+                // Ensure categories populate after auth
+                await this.loadCategories();
                 
                 console.log('Login successful, app should be visible now');
             } else {
@@ -234,6 +255,8 @@ class HardwareInventorySystem {
                 break;
             case 'budget':
                 this.loadBudget();
+                // Also refresh categories for budget dropdowns
+                this.loadCategories();
                 break;
             case 'reports':
                 this.loadReports();
@@ -375,6 +398,59 @@ class HardwareInventorySystem {
             });
         } catch (error) {
             console.error('Error loading inventory for select:', error);
+        }
+    }
+
+    // Load categories for all relevant selects
+    async loadCategories() {
+        try {
+            let categories = [];
+            try {
+                categories = await this.fetchData('/api/inventory/categories');
+            } catch (e) {
+                // Fallback if routes are mounted differently
+                categories = await this.fetchData('/api/categories');
+            }
+
+            // Inventory selects use ID values
+            const itemCategorySelect = document.getElementById('itemCategory');
+            if (itemCategorySelect) {
+                itemCategorySelect.innerHTML = '<option value="">Select Category</option>';
+                categories.forEach(cat => {
+                    itemCategorySelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+                });
+            }
+
+            const editItemCategorySelect = document.getElementById('editItemCategory');
+            if (editItemCategorySelect) {
+                editItemCategorySelect.innerHTML = '<option value="">Select Category</option>';
+                categories.forEach(cat => {
+                    editItemCategorySelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+                });
+            }
+
+            // Budget selects use category NAME values (backend expects string)
+            const budgetCategorySelect = document.getElementById('budgetCategory');
+            if (budgetCategorySelect) {
+                budgetCategorySelect.innerHTML = '<option value="">Select Category</option>';
+                categories.forEach(cat => {
+                    budgetCategorySelect.innerHTML += `<option value="${cat.name}">${cat.name}</option>`;
+                });
+            }
+
+            const editBudgetCategorySelect = document.getElementById('editBudgetCategory');
+            if (editBudgetCategorySelect) {
+                editBudgetCategorySelect.innerHTML = '<option value="">Select Category</option>';
+                categories.forEach(cat => {
+                    editBudgetCategorySelect.innerHTML += `<option value="${cat.name}">${cat.name}</option>`;
+                });
+            }
+
+            if (!categories || categories.length === 0) {
+                this.showAlert('No categories found. Add categories in Setup first.', 'info');
+            }
+        } catch (error) {
+            console.error('Error loading categories:', error);
         }
     }
 
@@ -1432,7 +1508,13 @@ class HardwareInventorySystem {
 
     async loadCategoriesList() {
         try {
-            const categories = await this.fetchData('/api/inventory/categories');
+            let categories = [];
+            try {
+                categories = await this.fetchData('/api/inventory/categories');
+            } catch (e) {
+                // fallback route if mounted differently in server
+                categories = await this.fetchData('/api/categories');
+            }
             const container = document.getElementById('categoriesList');
             
             if (!container) return;
@@ -1508,7 +1590,13 @@ class HardwareInventorySystem {
 
     async loadSetupCategories() {
         try {
-            const categories = await this.fetchData('/api/inventory/categories');
+            let categories = [];
+            try {
+                categories = await this.fetchData('/api/inventory/categories');
+            } catch (e) {
+                // fallback route if mounted differently in server
+                categories = await this.fetchData('/api/categories');
+            }
             const select = document.getElementById('setupItemCategory');
             if (select) {
                 select.innerHTML = '<option value="">Select Category</option>';
