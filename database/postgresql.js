@@ -85,9 +85,11 @@ const initializeDatabase = async () => {
                 customer_phone VARCHAR(20),
                 payment_method VARCHAR(50),
                 staff_id INTEGER REFERENCES staff(id),
+                notes TEXT,
                 sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try { await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS notes TEXT`); } catch (e) {}
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS budget (
