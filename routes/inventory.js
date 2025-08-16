@@ -236,7 +236,7 @@ router.post('/', [
 
     db.run(query, [name, description, category_id, sku, quantity, min_quantity, unit_price, supplier, location], function(err) {
         if (err) {
-            return res.status(500).json({ error: 'Failed to add item' });
+            return res.status(500).json({ error: 'Failed to add item', message: err.message });
         }
         res.status(201).json({ 
             message: 'Item added successfully',
