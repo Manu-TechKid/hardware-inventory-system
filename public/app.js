@@ -916,9 +916,11 @@ class HardwareInventorySystem {
         if (btn) { btn.disabled = true; btn.innerText = 'Adding...'; }
 
         try {
+            const jsonPayload = { category, amount, month_year };
+            console.debug('AddBudget payload (JSON):', jsonPayload);
             const response = await this.fetchData('/api/budget', {
                 method: 'POST',
-                body: JSON.stringify({ category, amount, month_year })
+                body: JSON.stringify(jsonPayload)
             });
 
             if (response && response.id) {
@@ -931,8 +933,34 @@ class HardwareInventorySystem {
                 this.showAlert('Unexpected response from server when adding budget.', 'danger');
             }
         } catch (error) {
-            console.error('Add budget error:', error);
-            this.showAlert(error.message || 'Failed to add budget. Please try again.', 'danger');
+            console.warn('Add budget JSON request failed, retrying as form-encoded. Reason:', error);
+            try {
+                const form = new URLSearchParams();
+                form.append('category', category);
+                form.append('amount', String(amount));
+                form.append('month_year', month_year);
+                console.debug('AddBudget payload (FormData):', Object.fromEntries(form));
+                const response = await this.fetchData('/api/budget', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: form
+                });
+                if (response && response.id) {
+                    this.showAlert('Budget added successfully!', 'success');
+                    document.getElementById('addBudgetForm').reset();
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addBudgetModal'));
+                    if (modal) modal.hide();
+                    this.loadBudget();
+                } else {
+                    this.showAlert('Unexpected response from server when adding budget.', 'danger');
+                }
+            } catch (error2) {
+                console.error('Add budget failed (both JSON and form):', error2);
+                this.showAlert(error2.message || 'Failed to add budget. Please try again.', 'danger');
+            }
         } finally {
             if (btn) { btn.disabled = false; btn.innerText = 'Add Budget'; }
         }
