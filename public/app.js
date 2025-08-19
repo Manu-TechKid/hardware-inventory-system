@@ -485,6 +485,20 @@ class HardwareInventorySystem {
                 });
             }
 
+            // Inventory category filter (All Categories + list)
+            const categoryFilterSelect = document.getElementById('categoryFilter');
+            if (categoryFilterSelect) {
+                const current = categoryFilterSelect.value; // preserve selection if possible
+                categoryFilterSelect.innerHTML = '<option value="">All Categories</option>';
+                categories.forEach(cat => {
+                    categoryFilterSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+                });
+                // restore selection if still present
+                if ([...categoryFilterSelect.options].some(o => o.value === current)) {
+                    categoryFilterSelect.value = current;
+                }
+            }
+
             const editItemCategorySelect = document.getElementById('editItemCategory');
             if (editItemCategorySelect) {
                 editItemCategorySelect.innerHTML = '<option value="">Select Category</option>';
