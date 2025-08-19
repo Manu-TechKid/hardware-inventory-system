@@ -4,28 +4,61 @@ const db = require('../database/database');
 
 const router = express.Router();
 
+// Helpers for cross-DB schema differences
+const isPg = !!process.env.DATABASE_URL;
+const normalizeBudgetRow = (row) => {
+    if (!row) return row;
+    if (!isPg) return row; // sqlite already matches
+    // Map Postgres columns -> expected API fields
+    const month = row.month ?? row.month_int;
+    const year = row.year ?? row.year_int;
+    const mm = month ? String(month).padStart(2, '0') : null;
+    return {
+        id: row.id,
+        category: row.category,
+        amount: row.allocated_amount,
+        spent: row.spent_amount,
+        month_year: (year && mm) ? `${year}-${mm}` : row.month_year,
+        created_at: row.created_at
+    };
+};
+
+function parseMonthYear(ym) {
+    // accepts 'YYYY-MM' or 'YYYY/MM' or 'YYYY-MM-DD'
+    if (!ym) return { month: null, year: null };
+    const m = String(ym).match(/^(\d{4})[-\/]?(\d{2})/);
+    if (!m) return { month: null, year: null };
+    return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) };
+}
+
 // Get all budgets
 router.get('/', (req, res) => {
-    const query = 'SELECT * FROM budget ORDER BY month_year DESC, category';
-    
+    const query = isPg
+        ? 'SELECT id, category, allocated_amount, spent_amount, month, year, created_at FROM budget ORDER BY year DESC, month DESC, category'
+        : 'SELECT * FROM budget ORDER BY month_year DESC, category';
+
     db.all(query, [], (err, budgets) => {
         if (err) {
             return res.status(500).json({ error: 'Database error' });
         }
-        res.json(budgets);
+        const out = isPg ? budgets.map(normalizeBudgetRow) : budgets;
+        res.json(out);
     });
 });
 
 // Get single budget
 router.get('/:id', (req, res) => {
-    db.get('SELECT * FROM budget WHERE id = ?', [req.params.id], (err, budget) => {
+    const query = isPg
+        ? 'SELECT id, category, allocated_amount, spent_amount, month, year, created_at FROM budget WHERE id = ?'
+        : 'SELECT * FROM budget WHERE id = ?';
+    db.get(query, [req.params.id], (err, budget) => {
         if (err) {
             return res.status(500).json({ error: 'Database error' });
         }
         if (!budget) {
             return res.status(404).json({ error: 'Budget not found' });
         }
-        res.json(budget);
+        res.json(isPg ? normalizeBudgetRow(budget) : budget);
     });
 });
 
@@ -42,17 +75,27 @@ router.post('/', [
 
     const { category, amount, month_year, spent = 0 } = req.body;
 
-    const query = 'INSERT INTO budget (category, amount, spent, month_year) VALUES (?, ?, ?, ?)';
-
-    db.run(query, [category, amount, spent, month_year], function(err) {
-        if (err) {
-            return res.status(500).json({ error: 'Failed to add budget' });
+    if (isPg) {
+        const { month, year } = parseMonthYear(month_year);
+        if (!month || !year) {
+            return res.status(400).json({ error: 'Invalid month_year format. Expected YYYY-MM' });
         }
-        res.status(201).json({ 
-            message: 'Budget added successfully',
-            id: this.lastID 
+        const query = 'INSERT INTO budget (category, allocated_amount, spent_amount, month, year) VALUES (?, ?, ?, ?, ?)';
+        db.run(query, [category, amount, spent, month, year], function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to add budget' });
+            }
+            res.status(201).json({ message: 'Budget added successfully', id: this.lastID });
         });
-    });
+    } else {
+        const query = 'INSERT INTO budget (category, amount, spent, month_year) VALUES (?, ?, ?, ?)';
+        db.run(query, [category, amount, spent, month_year], function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to add budget' });
+            }
+            res.status(201).json({ message: 'Budget added successfully', id: this.lastID });
+        });
+    }
 });
 
 // Update budget
@@ -82,7 +125,9 @@ router.put('/:id', [
 
     values.push(id);
 
-    const query = `UPDATE budget SET ${updateFields.join(', ')} WHERE id = ?`;
+    const query = isPg
+        ? `UPDATE budget SET ${updateFields.join(', ')} WHERE id = ?`
+        : `UPDATE budget SET ${updateFields.join(', ')} WHERE id = ?`;
 
     db.run(query, values, function(err) {
         if (err) {
@@ -110,31 +155,46 @@ router.delete('/:id', (req, res) => {
 
 // Get budget by category
 router.get('/category/:category', (req, res) => {
-    const query = 'SELECT * FROM budget WHERE category = ? ORDER BY month_year DESC';
-    
+    const query = isPg
+        ? 'SELECT id, category, allocated_amount, spent_amount, month, year, created_at FROM budget WHERE category = ? ORDER BY year DESC, month DESC'
+        : 'SELECT * FROM budget WHERE category = ? ORDER BY month_year DESC';
     db.all(query, [req.params.category], (err, budgets) => {
         if (err) {
             return res.status(500).json({ error: 'Database error' });
         }
-        res.json(budgets);
+        const out = isPg ? budgets.map(normalizeBudgetRow) : budgets;
+        res.json(out);
     });
 });
 
 // Get budget by month/year
 router.get('/month/:monthYear', (req, res) => {
-    const query = 'SELECT * FROM budget WHERE month_year = ? ORDER BY category';
-    
-    db.all(query, [req.params.monthYear], (err, budgets) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(budgets);
-    });
+    if (isPg) {
+        const { month, year } = parseMonthYear(req.params.monthYear);
+        const query = 'SELECT id, category, allocated_amount, spent_amount, month, year, created_at FROM budget WHERE month = ? AND year = ? ORDER BY category';
+        db.all(query, [month, year], (err, budgets) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json(budgets.map(normalizeBudgetRow));
+        });
+    } else {
+        const query = 'SELECT * FROM budget WHERE month_year = ? ORDER BY category';
+        db.all(query, [req.params.monthYear], (err, budgets) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json(budgets);
+        });
+    }
 });
 
 // Get budget summary
 router.get('/summary', (req, res) => {
-    const query = `
+    const query = isPg ? `
+        SELECT 
+            COALESCE(SUM(allocated_amount),0) as total_budget,
+            COALESCE(SUM(spent_amount),0) as total_spent,
+            COALESCE(SUM(allocated_amount - spent_amount),0) as remaining_budget,
+            COUNT(*) as total_categories
+        FROM budget
+    ` : `
         SELECT 
             SUM(amount) as total_budget,
             SUM(spent) as total_spent,
@@ -142,7 +202,6 @@ router.get('/summary', (req, res) => {
             COUNT(*) as total_categories
         FROM budget
     `;
-    
     db.get(query, [], (err, summary) => {
         if (err) {
             return res.status(500).json({ error: 'Database error' });
@@ -165,7 +224,9 @@ router.post('/transaction', [
 
     const { type, amount, description, category, staff_id } = req.body;
 
-    const query = 'INSERT INTO transactions (type, amount, description, category, staff_id) VALUES (?, ?, ?, ?, ?)';
+    const query = isPg
+        ? 'INSERT INTO transactions (type, amount, description, category, staff_id) VALUES (?, ?, ?, ?, ?)'
+        : 'INSERT INTO transactions (type, amount, description, category, staff_id) VALUES (?, ?, ?, ?, ?)';
 
     db.run(query, [type, amount, description, category, staff_id], function(err) {
         if (err) {
@@ -175,12 +236,22 @@ router.post('/transaction', [
         // If it's an expense, update the spent amount in budget
         if (type === 'expense') {
             const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
-            db.run('UPDATE budget SET spent = spent + ? WHERE category = ? AND month_year = ?', 
-                [amount, category, currentMonth], function(err) {
-                if (err) {
-                    console.error('Failed to update budget spent amount:', err);
-                }
-            });
+            if (isPg) {
+                const { month, year } = parseMonthYear(currentMonth);
+                db.run('UPDATE budget SET spent_amount = spent_amount + ? WHERE category = ? AND month = ? AND year = ?', 
+                    [amount, category, month, year], function(err) {
+                    if (err) {
+                        console.error('Failed to update budget spent amount:', err);
+                    }
+                });
+            } else {
+                db.run('UPDATE budget SET spent = spent + ? WHERE category = ? AND month_year = ?', 
+                    [amount, category, currentMonth], function(err) {
+                    if (err) {
+                        console.error('Failed to update budget spent amount:', err);
+                    }
+                });
+            }
         }
 
         res.status(201).json({ 
