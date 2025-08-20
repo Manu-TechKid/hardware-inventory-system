@@ -19,6 +19,48 @@ class HardwareInventorySystem {
         this.init();
     }
 
+    // Helper: is mobile viewport
+    isMobile() {
+        return window.innerWidth <= 768;
+    }
+
+    // Update UI bits related to the sidebar/toggle/overlay for responsiveness
+    updateSidebarUI() {
+        const sidebar = document.querySelector('.sidebar');
+        const main = document.querySelector('.main-content');
+        const toggleBtn = document.getElementById('sidebarToggle');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (!sidebar || !main || !toggleBtn) return;
+
+        const collapsed = sidebar.classList.contains('collapsed');
+        const mobile = this.isMobile();
+
+        if (mobile) {
+            // Always show toggle on mobile
+            toggleBtn.style.display = 'block';
+            // Keep a safe position
+            toggleBtn.style.left = '12px';
+            toggleBtn.style.top = '12px';
+            // Overlay visible only when sidebar is open
+            if (overlay) {
+                if (!collapsed) overlay.classList.add('show');
+                else overlay.classList.remove('show');
+            }
+        } else {
+            // Desktop: hide overlay
+            overlay?.classList.remove('show');
+            // Hide toggle when sidebar expanded to avoid covering header text; show when collapsed
+            if (collapsed) {
+                toggleBtn.style.display = 'block';
+                // Place the button within the collapsed sidebar area (70px)
+                toggleBtn.style.left = '18px';
+                toggleBtn.style.top = '12px';
+            } else {
+                toggleBtn.style.display = 'none';
+            }
+        }
+    }
+
     init() {
         this.setupEventListeners();
 
@@ -39,6 +81,8 @@ class HardwareInventorySystem {
         } catch (_) { /* ignore */ }
 
         this.checkAuth();
+        // Ensure UI reflects initial sidebar state
+        this.updateSidebarUI();
         // Initial attempt (may fail pre-auth; we also repopulate post-login and on modal open)
         this.loadCategories();
     }
@@ -61,6 +105,7 @@ class HardwareInventorySystem {
                         try { localStorage.setItem('sidebarCollapsed', 'true'); } catch (_) {}
                     }
                 }
+                this.updateSidebarUI();
             });
         });
 
@@ -74,8 +119,29 @@ class HardwareInventorySystem {
                 if (isCollapsed) main.classList.add('sidebar-collapsed');
                 else main.classList.remove('sidebar-collapsed');
                 try { localStorage.setItem('sidebarCollapsed', String(isCollapsed)); } catch (_) {}
+                this.updateSidebarUI();
             });
         }
+
+        // Overlay click should close sidebar on mobile
+        const overlay = document.getElementById('sidebarOverlay');
+        if (overlay) {
+            overlay.addEventListener('click', () => {
+                if (this.isMobile()) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const main = document.querySelector('.main-content');
+                    if (sidebar && main && !sidebar.classList.contains('collapsed')) {
+                        sidebar.classList.add('collapsed');
+                        main.classList.add('sidebar-collapsed');
+                        try { localStorage.setItem('sidebarCollapsed', 'true'); } catch (_) {}
+                        this.updateSidebarUI();
+                    }
+                }
+            });
+        }
+
+        // Update UI on resize (switching between mobile/desktop states)
+        window.addEventListener('resize', () => this.updateSidebarUI());
 
         // Budget month filter change
         const monthInput = document.getElementById('budgetMonthFilter');
