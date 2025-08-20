@@ -38,9 +38,15 @@ class HardwareInventorySystem {
         if (mobile) {
             // Always show toggle on mobile
             toggleBtn.style.display = 'block';
-            // Keep a safe position
-            toggleBtn.style.left = '12px';
             toggleBtn.style.top = '12px';
+            // If sidebar is open, move toggle to the right so it's not under the sidebar
+            if (!collapsed) {
+                toggleBtn.style.left = 'auto';
+                toggleBtn.style.right = '12px';
+            } else {
+                toggleBtn.style.right = 'auto';
+                toggleBtn.style.left = '12px';
+            }
             // Overlay visible only when sidebar is open
             if (overlay) {
                 if (!collapsed) overlay.classList.add('show');
@@ -54,6 +60,7 @@ class HardwareInventorySystem {
                 toggleBtn.style.display = 'block';
                 // Place the button within the collapsed sidebar area (70px)
                 toggleBtn.style.left = '18px';
+                toggleBtn.style.right = 'auto';
                 toggleBtn.style.top = '12px';
             } else {
                 toggleBtn.style.display = 'none';

@@ -1,3 +1,9 @@
+/* Safe area support for mobile browsers (notches, status bars) */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+}
 /* Custom styles for Hardware Inventory Management System */
 
 body {
@@ -155,13 +161,21 @@ html {
 /* Floating sidebar toggle button */
 .sidebar-toggle-btn {
     position: fixed;
-    top: 12px;
-    left: 12px;
-    z-index: 2000;
+    top: calc(var(--safe-top) + 12px);
+    left: calc(var(--safe-left) + 12px);
+    z-index: 3000;
     border-width: 2px;
     padding: 8px 12px;
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    background-color: #ffffff; /* high contrast for visibility */
+    color: #0d6efd;
+    border-color: #0d6efd;
+    min-width: 44px; /* Apple HIG / Material minimum touch */
+    min-height: 44px;
+    line-height: 1.1;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* Overlay shown on mobile when sidebar is open */
@@ -475,6 +489,23 @@ html {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    .sidebar-toggle-btn {
+        padding: 12px 16px;
+        font-size: 18px;
+        border-radius: 12px;
+        top: 10px;
+        /* Keep using the base z-index (3000) so it stays above the overlay (1500) */
+    }
+    .sidebar-toggle-btn::before {
+        content: '';
+        position: absolute;
+        top: -20px;
+        left: -20px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background-color: transparent;
+    }
     .sidebar {
         width: 250px;
         height: 100vh;
