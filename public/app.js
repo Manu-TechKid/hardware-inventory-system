@@ -21,21 +21,59 @@ class HardwareInventorySystem {
 
     init() {
         this.setupEventListeners();
+
+        // Initialize sidebar collapsed state from localStorage
+        try {
+            const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            const sidebar = document.querySelector('.sidebar');
+            const main = document.querySelector('.main-content');
+            if (collapsed) {
+                sidebar?.classList.add('collapsed');
+                main?.classList.add('sidebar-collapsed');
+            } else {
+                sidebar?.classList.remove('collapsed');
+                main?.classList.remove('sidebar-collapsed');
+            }
+        } catch (_) { /* ignore */ }
+
         this.checkAuth();
         // Initial attempt (may fail pre-auth; we also repopulate post-login and on modal open)
         this.loadCategories();
     }
 
     setupEventListeners() {
-        // Navigation (robust click handling within nav links)
-        document.querySelectorAll('[data-section]').forEach(link => {
+        // Navigation
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                const target = e.target.closest('[data-section]');
-                if (!target) return;
-                this.showSection(target.getAttribute('data-section'));
+                const section = link.getAttribute('data-section');
+                if (section) this.showSection(section);
             });
         });
+
+        // Sidebar toggle
+        const toggleBtn = document.getElementById('sidebarToggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                const sidebar = document.querySelector('.sidebar');
+                const main = document.querySelector('.main-content');
+                const isCollapsed = sidebar.classList.toggle('collapsed');
+                if (isCollapsed) main.classList.add('sidebar-collapsed');
+                else main.classList.remove('sidebar-collapsed');
+                try { localStorage.setItem('sidebarCollapsed', String(isCollapsed)); } catch (_) {}
+            });
+        }
+
+        // Budget month filter change
+        const monthInput = document.getElementById('budgetMonthFilter');
+        if (monthInput) {
+            monthInput.addEventListener('change', () => {
+                // Only refresh summary to keep table intact; change to this.loadBudget() if table should follow
+                this.fetchData(`/api/budget/summary?month=${encodeURIComponent(monthInput.value)}`)
+                    .then(s => this.displayBudgetSummary(s))
+                    .catch(err => console.error('Failed to refresh budget summary:', err));
+            });
+        }
 
         // Login form
         document.getElementById('loginForm').addEventListener('submit', (e) => {
@@ -376,8 +414,19 @@ class HardwareInventorySystem {
         try {
             this.budgets = await this.fetchData('/api/budget');
             this.displayBudget(this.budgets);
-            
-            const summary = await this.fetchData('/api/budget/summary');
+            // Determine selected month for summary (YYYY-MM)
+            let month = '';
+            const monthInput = document.getElementById('budgetMonthFilter');
+            if (monthInput && monthInput.value) {
+                month = monthInput.value;
+            } else {
+                const d = new Date();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                month = `${d.getFullYear()}-${m}`;
+                if (monthInput) monthInput.value = month;
+            }
+
+            const summary = await this.fetchData(`/api/budget/summary?month=${encodeURIComponent(month)}`);
             this.displayBudgetSummary(summary);
         } catch (error) {
             console.error('Error loading budget:', error);
@@ -677,22 +726,28 @@ class HardwareInventorySystem {
         const container = document.getElementById('budgetSummary');
         if (!container) return;
         
+        const total = parseFloat(summary.total_budget || 0);
+        const spent = parseFloat(summary.total_spent || 0);
+        const remaining = parseFloat(summary.remaining_budget || 0);
+        const percent = total > 0 ? Math.min((spent / total) * 100, 100) : 0;
+        const barClass = percent > 80 ? 'bg-danger' : 'bg-success';
+
         container.innerHTML = `
             <div class="mb-3">
-                <strong>Total Budget:</strong> KSH ${parseFloat(summary.total_budget || 0).toFixed(2)}
+                <strong>Total Budget:</strong> KSH ${total.toFixed(2)}
             </div>
             <div class="mb-3">
-                <strong>Total Spent:</strong> KSH ${parseFloat(summary.total_spent || 0).toFixed(2)}
+                <strong>Total Spent:</strong> KSH ${spent.toFixed(2)}
             </div>
             <div class="mb-3">
                 <strong>Remaining:</strong> 
-                <span class="badge ${(summary.remaining_budget || 0) >= 0 ? 'badge-success' : 'badge-danger'}">
-                    KSH ${parseFloat(summary.remaining_budget || 0).toFixed(2)}
+                <span class="badge ${remaining >= 0 ? 'badge-success' : 'badge-danger'}">
+                    KSH ${remaining.toFixed(2)}
                 </span>
             </div>
             <div class="progress">
-                <div class="progress-bar ${(summary.total_spent / summary.total_budget * 100) > 80 ? 'bg-danger' : 'bg-success'}" 
-                     style="width: ${Math.min((summary.total_spent / summary.total_budget * 100), 100)}%">
+                <div class="progress-bar ${barClass}" 
+                     style="width: ${percent}%">
                 </div>
             </div>
         `;

@@ -35,6 +35,12 @@ html {
     display: flex;
     flex-direction: column;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    transition: width 0.25s ease, transform 0.25s ease;
+}
+
+/* Collapsed sidebar (desktop) */
+.sidebar.collapsed {
+    width: 70px;
 }
 
 .sidebar-header {
@@ -139,6 +145,23 @@ html {
     padding: 20px;
     min-height: 100vh;
     background-color: #f8f9fa;
+}
+
+/* When sidebar is collapsed */
+.main-content.sidebar-collapsed {
+    margin-left: 70px;
+}
+
+/* Floating sidebar toggle button */
+.sidebar-toggle-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1100;
+    border-width: 2px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .content-header {
@@ -437,16 +460,24 @@ html {
 /* Responsive Design */
 @media (max-width: 768px) {
     .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        transform: none;
+        width: 250px;
+        height: 100vh;
+        position: fixed;
+        transform: translateX(0);
+    }
+    /* Off-canvas behavior: collapsed hides sidebar */
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        width: 250px;
     }
     
     .main-content {
         margin-left: 0;
         padding: 10px;
         min-height: auto;
+    }
+    .main-content.sidebar-collapsed {
+        margin-left: 0;
     }
     
     .card-body h2 {

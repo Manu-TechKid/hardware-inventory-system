@@ -187,27 +187,65 @@ router.get('/month/:monthYear', (req, res) => {
 
 // Get budget summary
 router.get('/summary', (req, res) => {
-    const query = isPg ? `
-        SELECT 
-            COALESCE(SUM(allocated_amount),0) as total_budget,
-            COALESCE(SUM(spent_amount),0) as total_spent,
-            COALESCE(SUM(allocated_amount - spent_amount),0) as remaining_budget,
-            COUNT(*) as total_categories
-        FROM budget
-    ` : `
-        SELECT 
-            SUM(amount) as total_budget,
-            SUM(spent) as total_spent,
-            SUM(amount - spent) as remaining_budget,
-            COUNT(*) as total_categories
-        FROM budget
-    `;
-    db.get(query, [], (err, summary) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
+    const monthParam = req.query.month; // 'YYYY-MM'
+    if (isPg) {
+        if (monthParam) {
+            const { month, year } = parseMonthYear(monthParam);
+            const query = `
+                SELECT 
+                    COALESCE(SUM(allocated_amount),0) as total_budget,
+                    COALESCE(SUM(spent_amount),0) as total_spent,
+                    COALESCE(SUM(allocated_amount - spent_amount),0) as remaining_budget,
+                    COUNT(*) as total_categories
+                FROM budget
+                WHERE month = ? AND year = ?
+            `;
+            return db.get(query, [month, year], (err, summary) => {
+                if (err) return res.status(500).json({ error: 'Database error' });
+                res.json(summary || { total_budget: 0, total_spent: 0, remaining_budget: 0, total_categories: 0 });
+            });
         }
-        res.json(summary);
-    });
+        const query = `
+            SELECT 
+                COALESCE(SUM(allocated_amount),0) as total_budget,
+                COALESCE(SUM(spent_amount),0) as total_spent,
+                COALESCE(SUM(allocated_amount - spent_amount),0) as remaining_budget,
+                COUNT(*) as total_categories
+            FROM budget
+        `;
+        return db.get(query, [], (err, summary) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json(summary);
+        });
+    } else {
+        if (monthParam) {
+            const query = `
+                SELECT 
+                    COALESCE(SUM(amount),0) as total_budget,
+                    COALESCE(SUM(spent),0) as total_spent,
+                    COALESCE(SUM(amount - spent),0) as remaining_budget,
+                    COUNT(*) as total_categories
+                FROM budget
+                WHERE month_year = ?
+            `;
+            return db.get(query, [monthParam], (err, summary) => {
+                if (err) return res.status(500).json({ error: 'Database error' });
+                res.json(summary || { total_budget: 0, total_spent: 0, remaining_budget: 0, total_categories: 0 });
+            });
+        }
+        const query = `
+            SELECT 
+                SUM(amount) as total_budget,
+                SUM(spent) as total_spent,
+                SUM(amount - spent) as remaining_budget,
+                COUNT(*) as total_categories
+            FROM budget
+        `;
+        return db.get(query, [], (err, summary) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json(summary);
+        });
+    }
 });
 
 // Add transaction
