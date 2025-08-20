@@ -36,17 +36,11 @@ class HardwareInventorySystem {
         const mobile = this.isMobile();
 
         if (mobile) {
-            // Always show toggle on mobile
+            // Always show toggle on mobile (position handled by CSS)
             toggleBtn.style.display = 'block';
-            toggleBtn.style.top = '12px';
-            // If sidebar is open, move toggle to the right so it's not under the sidebar
-            if (!collapsed) {
-                toggleBtn.style.left = 'auto';
-                toggleBtn.style.right = '12px';
-            } else {
-                toggleBtn.style.right = 'auto';
-                toggleBtn.style.left = '12px';
-            }
+            toggleBtn.style.left = '';
+            toggleBtn.style.right = '';
+            toggleBtn.style.top = '';
             // Overlay visible only when sidebar is open
             if (overlay) {
                 if (!collapsed) overlay.classList.add('show');
