@@ -22,12 +22,13 @@ class HardwareInventorySystem {
     init() {
         this.setupEventListeners();
 
-        // Initialize sidebar collapsed state from localStorage
+        // Initialize sidebar collapsed state from localStorage, else auto-collapse on mobile
         try {
-            const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            const stored = localStorage.getItem('sidebarCollapsed');
             const sidebar = document.querySelector('.sidebar');
             const main = document.querySelector('.main-content');
-            if (collapsed) {
+            const shouldCollapse = (stored === 'true') || (stored === null && window.innerWidth <= 768);
+            if (shouldCollapse) {
                 sidebar?.classList.add('collapsed');
                 main?.classList.add('sidebar-collapsed');
             } else {
