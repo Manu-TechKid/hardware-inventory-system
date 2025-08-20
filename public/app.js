@@ -50,6 +50,17 @@ class HardwareInventorySystem {
                 e.preventDefault();
                 const section = link.getAttribute('data-section');
                 if (section) this.showSection(section);
+
+                // On mobile, auto-hide sidebar after navigating
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const main = document.querySelector('.main-content');
+                    if (sidebar && main && !sidebar.classList.contains('collapsed')) {
+                        sidebar.classList.add('collapsed');
+                        main.classList.add('sidebar-collapsed');
+                        try { localStorage.setItem('sidebarCollapsed', 'true'); } catch (_) {}
+                    }
+                }
             });
         });
 
